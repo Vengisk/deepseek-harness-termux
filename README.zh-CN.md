@@ -6,7 +6,7 @@
 
 ---
 
-`deepseek-harness-termux` 是一个社区维护的兼容层,将官方 [`@deepseek-ai/dsh`](https://github.com/deepseek-ai/deepseek-harness) 智能体框架移植到基于 [Termux](https://termux.com/) 的 Android 环境。官方 npm 包面向 glibc 系的 Linux 发行版构建,依赖的原生模块在 Android 的 Bionic libc 上要么编译失败、要么行为异常。本仓库的做法是**直接修改源码**,而不是禁用依赖这些模块的插件,让每个功能在 Termux 上都真实可用。
+`deepseek-harness-termux` 是一个社区维护的兼容层,将官方 [`@deepseek-ai/dsh`](https://github.com/deepseek-ai/deepseek-harness) 智能体框架移植到基于 [Termux](https://termux.com/) 的 Android 环境。官方 npm 包面向 glibc 系的 Linux 发行版构建,依赖的原生模块在 Android 的 Bionic libc 上要么编译失败、要么行为异常。本项目做法是直接修改源码,而不是禁用依赖这些模块的插件,让每个功能在 Termux 上都真实可用。
 
 所有补丁均由干净的官方 tarball(`@deepseek-ai/dsh` `0.1.0-rc.6)`通过 `diff -u` 自动生成,精确、可复现。
 
