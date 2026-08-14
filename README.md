@@ -49,7 +49,7 @@ bash install.sh
 
 The installer is idempotent — re-running it skips already-applied patches and already-built artifacts.
 
-### What the installer does
+### How installation script work
 
 1. **Installs** `@deepseek-ai/dsh` globally.
 2. **Applies the Android source patches** under [`patches/`](patches/) to the installed packages.
