@@ -110,9 +110,22 @@ apply_patch "$REPO_DIR/patches/05-host-directory-picker-native-android.patch" "d
 # ── Step 3: Configure build environment for node-gyp ────────────────────────
 echo "==> [3/8] Configuring native addon build environment..."
 
-# Termux Bionic has no Android NDK metadata; tell node-gyp to skip the full
-# NDK cross-compile and use the Bionic sysroot directly.
+# Termux Bionic has no Android NDK metadata; tell node-gyp / gyp to skip the
+# full NDK cross-compile and use the Bionic sysroot directly.
+#
+# node-gyp reads npm_config_android_ndk_path from the environment (converted to
+# --android-ndk-path), but npm may strip unknown config keys.  GYP_DEFINES is
+# the authoritative way gyp's Python code reads variables
+# (gyp/pylib/gyp/__init__.py:ShlexEnv("GYP_DEFINES")).  We set both as a belt-
+# and-suspenders approach.
 export npm_config_android_ndk_path=""
+export GYP_DEFINES="android_ndk_path=''"
+
+# Some Termux setups or user profiles may have ANDROID_NDK_HOME pointing to a
+# non-existent or incomplete NDK.  Unset it so node-gyp does not attempt to
+# use a cross-compile toolchain — we want the native Termux clang instead.
+unset ANDROID_NDK_HOME
+unset ANDROID_NDK_ROOT
 
 # Node.js headers for native addon compilation
 NODE_DIR="$(node -e "console.log(require('path').join(require('os').homedir(), '.cache/node-gyp', process.version))" 2>/dev/null || true)"
