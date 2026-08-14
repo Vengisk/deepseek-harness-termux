@@ -76,6 +76,25 @@ fi
 
 # ── Step 1: Install @deepseek-ai/dsh ────────────────────────────────────────
 echo "==> [1/8] Installing @deepseek-ai/dsh globally..."
+
+# node-pty's install lifecycle runs `node scripts/prebuild.js || node-gyp rebuild`
+# with NO CLI arguments. On Android, gyp detects OS=android and node's stock
+# common.gypi has an android branch that references <(android_ndk_path) — but
+# provides NO default value for that variable -> "gyp: Undefined variable
+# android_ndk_path in binding.gyp".
+#
+# node-gyp's configure.js does NOT forward npm_config_android_ndk_path to gyp
+# (verified: it never appears in gyp spawn args). The only channels that work
+# for the bare `node-gyp rebuild` inside the npm install lifecycle are:
+#   1. GYP_DEFINES env var — gyp reads it via ShlexEnv() (gyp/__init__.py).
+#      This is gyp's OFFICIAL env-var channel for -D defines, not a plain
+#      shell variable. npm lifecycle children inherit it.
+#   2. Patching common.gypi with a default value (done in Step 3 as backstop).
+# We use BOTH: GYP_DEFINES for the npm install lifecycle, and the common.gypi
+# patch for any subsequent manual rebuilds where GYP_DEFINES may be unset.
+export GYP_DEFINES="${GYP_DEFINES:+$GYP_DEFINES }android_ndk_path="
+echo "  [OK] GYP_DEFINES='$GYP_DEFINES'"
+
 npm install -g @deepseek-ai/dsh@latest
 
 DSH_DIR="$(npm root -g)/@deepseek-ai/dsh"
@@ -110,13 +129,37 @@ apply_patch "$REPO_DIR/patches/05-host-directory-picker-native-android.patch" "d
 # ── Step 3: Configure build environment for node-gyp ────────────────────────
 echo "==> [3/8] Configuring native addon build environment..."
 
+# Belt-and-suspenders: patch node's cached common.gypi to give
+# android_ndk_path a default empty value. node's stock common.gypi has an
+# `['OS == "android"', { 'cflags': [ '-I<(android_ndk_path)/...' ] }]` branch
+# but NO corresponding variable default, so loading it on Android triggers
+# "Undefined variable android_ndk_path". This is idempotent and covers any
+# node-gyp call that bypasses the npm_config channel (e.g. manual rebuilds,
+# other native addons).
+for _cg in "$HOME"/.cache/node-gyp/*/include/node/common.gypi; do
+    [ -f "$_cg" ] || continue
+    if grep -q 'android_ndk_path' "$_cg" && ! grep -q "'android_ndk_path%'" "$_cg"; then
+        # Insert the variable default right after the opening 'variables': { block
+        # (line ~14). Use awk for a portable, robust insertion.
+        awk '
+            /^[[:space:]]*'variables'[[:space:]]*:[[:space:]]*\{/ && !_done {
+                print
+                print "    '"'"'android_ndk_path%'"'"': '"'"''"'"',        # Termux: default empty (no NDK metadata)"
+                _done=1
+                next
+            }
+            { print }
+        ' "$_cg" > "$_cg.tmp" && mv "$_cg.tmp" "$_cg"
+        echo "  [OK] patched android_ndk_path default in $_cg"
+    fi
+done
+
 # Termux has no standalone NDK metadata; node-gyp's android_ndk_path must be
-# explicitly set to empty so it uses the Bionic sysroot from ndk-sysroot.
-# We pass this via --android_ndk_path="" CLI argument in Step 4 (node-gyp
-# reads it from process.argv, not from shell env vars).
+# empty so the build uses the Bionic sysroot from ndk-sysroot. It is provided
+# via GYP_DEFINES (Step 1) and the common.gypi default patch above.
 #
-# However, we DO unset ANDROID_NDK_HOME/ROOT in case the user has them set
-# to a non-existent or incomplete NDK — that would cause node-gyp to attempt
+# We DO unset ANDROID_NDK_HOME/ROOT in case the user has them set to a
+# non-existent or incomplete NDK — that would cause node-gyp to attempt
 # cross-compilation instead of using the native Termux clang.
 unset ANDROID_NDK_HOME
 unset ANDROID_NDK_ROOT
@@ -148,10 +191,12 @@ PTY_DIR="$DSH_DIR/node_modules/node-pty"
 if [ -f "$PTY_DIR/build/Release/pty.node" ]; then
     echo "  [SKIP] pty.node already built."
 else
-    # node-gyp does NOT read shell environment variables automatically.
-    # Instead, we must pass android_ndk_path via CLI argument.
-    # See: node-gyp's parseArgs() reads argv, and gyp's Python code reads
-    # GYP_DEFINES from the environment via ShlexEnv().
+    # android_ndk_path is provided via GYP_DEFINES (exported in Step 1, still
+    # in the environment here) and via the common.gypi default-value patch
+    # (Step 3). No CLI arg needed — gyp only accepts -Dkey=val format anyway,
+    # not --key=val, and the bare `node-gyp rebuild` inside npm install
+    # lifecycle has no CLI args at all yet must succeed (it does, via
+    # GYP_DEFINES).
     #
     # We also need node-gyp on PATH.  npm's bundled node-gyp wrapper is at
     # npm/bin/node-gyp-bin/node-gyp — we add it to PATH manually.
@@ -160,8 +205,8 @@ else
         export PATH="$NODE_GYP_BIN:$PATH"
     fi
 
-    echo "  -> Running: node-gyp rebuild --android_ndk_path=\"\" --nodedir=\"$NODE_DIR\""
-    if (cd "$PTY_DIR" && node-gyp rebuild --android_ndk_path="" --nodedir="$NODE_DIR" 2>&1); then
+    echo "  -> Running: node-gyp rebuild --nodedir=\"$NODE_DIR\""
+    if (cd "$PTY_DIR" && node-gyp rebuild --nodedir="$NODE_DIR" 2>&1); then
         echo "  [OK] node-pty compiled."
     else
         echo "  [ERROR] node-pty build failed!"
