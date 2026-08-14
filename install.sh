@@ -110,20 +110,14 @@ apply_patch "$REPO_DIR/patches/05-host-directory-picker-native-android.patch" "d
 # ── Step 3: Configure build environment for node-gyp ────────────────────────
 echo "==> [3/8] Configuring native addon build environment..."
 
-# Termux Bionic has no Android NDK metadata; tell node-gyp / gyp to skip the
-# full NDK cross-compile and use the Bionic sysroot directly.
+# Termux has no standalone NDK metadata; node-gyp's android_ndk_path must be
+# explicitly set to empty so it uses the Bionic sysroot from ndk-sysroot.
+# We pass this via --android_ndk_path="" CLI argument in Step 4 (node-gyp
+# reads it from process.argv, not from shell env vars).
 #
-# node-gyp reads npm_config_android_ndk_path from the environment (converted to
-# --android-ndk-path), but npm may strip unknown config keys.  GYP_DEFINES is
-# the authoritative way gyp's Python code reads variables
-# (gyp/pylib/gyp/__init__.py:ShlexEnv("GYP_DEFINES")).  We set both as a belt-
-# and-suspenders approach.
-export npm_config_android_ndk_path=""
-export GYP_DEFINES="android_ndk_path=''"
-
-# Some Termux setups or user profiles may have ANDROID_NDK_HOME pointing to a
-# non-existent or incomplete NDK.  Unset it so node-gyp does not attempt to
-# use a cross-compile toolchain — we want the native Termux clang instead.
+# However, we DO unset ANDROID_NDK_HOME/ROOT in case the user has them set
+# to a non-existent or incomplete NDK — that would cause node-gyp to attempt
+# cross-compilation instead of using the native Termux clang.
 unset ANDROID_NDK_HOME
 unset ANDROID_NDK_ROOT
 
@@ -154,8 +148,20 @@ PTY_DIR="$DSH_DIR/node_modules/node-pty"
 if [ -f "$PTY_DIR/build/Release/pty.node" ]; then
     echo "  [SKIP] pty.node already built."
 else
-    echo "  -> Running: npm rebuild node-pty"
-    if (cd "$DSH_DIR" && npm rebuild node-pty 2>&1); then
+    # node-gyp does NOT read shell environment variables automatically.
+    # Instead, we must pass android_ndk_path via CLI argument.
+    # See: node-gyp's parseArgs() reads argv, and gyp's Python code reads
+    # GYP_DEFINES from the environment via ShlexEnv().
+    #
+    # We also need node-gyp on PATH.  npm's bundled node-gyp wrapper is at
+    # npm/bin/node-gyp-bin/node-gyp — we add it to PATH manually.
+    NODE_GYP_BIN="$(dirname "$(dirname "$(which npm)")")/lib/node_modules/npm/bin/node-gyp-bin"
+    if [ -d "$NODE_GYP_BIN" ]; then
+        export PATH="$NODE_GYP_BIN:$PATH"
+    fi
+
+    echo "  -> Running: node-gyp rebuild --android_ndk_path=\"\" --nodedir=\"$NODE_DIR\""
+    if (cd "$PTY_DIR" && node-gyp rebuild --android_ndk_path="" --nodedir="$NODE_DIR" 2>&1); then
         echo "  [OK] node-pty compiled."
     else
         echo "  [ERROR] node-pty build failed!"
