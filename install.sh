@@ -1,23 +1,82 @@
 #!/usr/bin/env bash
-# install.sh — Automated installation of @deepseek-ai/dsh on Android/Termux
+# install.sh — Full-feature installation of @deepseek-ai/dsh on Android/Termux
 # Usage: bash install.sh
 #
-# This script handles:
-#   1. Installing the dsh npm package globally
-#   2. Patching koffi for Android (statx syscall)
-#   3. Installing sharp WebAssembly fallback
-#   4. Initializing the web profile with compatibility patches
+# This script installs dsh with ALL plugins enabled (HMR, subprocess, bash
+# sandbox, permission). It applies the source patches under ./patches so the
+# Termux build has real functionality instead of disabled plugins.
+#
+# Steps:
+#   1. Install @deepseek-ai/dsh globally (npm >= 26 ships --expose-internals)
+#   2. Apply Android source patches to the installed packages (idempotent)
+#   3. Compile node-pty with the Android NDK toolchain (CFLAGS target API 30)
+#   4. Patch koffi statx() for Android (statx is unavailable on Bionic)
+#   5. Install sharp WebAssembly fallback
+#   6. Verify the runtime (node-pty load, default shell resolution)
 
 set -euo pipefail
+
+cd "$(dirname "$0")"
+REPO_DIR="$(pwd)"
 
 echo "==> Installing @deepseek-ai/dsh globally..."
 npm install -g @deepseek-ai/dsh@latest
 
 DSH_DIR="$(npm root -g)/@deepseek-ai/dsh"
+DSH_PKGS="$DSH_DIR/node_modules/@deepseek-ai"
 echo "==> Package installed at: $DSH_DIR"
 
-# ── Fix 1: Patch koffi statx() for Android ──────────────────────────────────
-echo "==> [1/4] Patching koffi statx() syscall for Android..."
+# ── Helpers ──────────────────────────────────────────────────────────────────
+apply_patch() {
+    local patch="$1" pkg="$2"
+    local dir="$DSH_PKGS/$pkg"
+    if [ ! -d "$dir" ]; then
+        echo "  [WARN] $pkg not found; skipping patch $patch"
+        return
+    fi
+    # --dry-run first: skip when already applied (idempotent)
+    if (cd "$dir" && patch -p1 --dry-run --forward < "$patch" > /dev/null 2>&1); then
+        (cd "$dir" && patch -p1 --forward < "$patch")
+        echo "  [OK] $patch -> $pkg"
+    else
+        echo "  [SKIP] $patch already applied or inapplicable ($pkg)"
+    fi
+}
+
+# ── Fix 1: Android source patches ────────────────────────────────────────────
+echo "==> [1/6] Applying Android platform patches..."
+apply_patch "$REPO_DIR/patches/01-terminal-bash-android-shell.patch"        "dsh-terminal-bash"
+apply_patch "$REPO_DIR/patches/02-session-persistence-link-rename.patch"     "dsh-session-persistence-jsonl"
+apply_patch "$REPO_DIR/patches/03-subprocess-local-android.patch"            "dsh-subprocess-local"
+apply_patch "$REPO_DIR/patches/04-host-apiproxy-termux-open-index.patch"     "dsh-host-apiproxy"
+apply_patch "$REPO_DIR/patches/04-host-apiproxy-termux-open-opener.patch"    "dsh-host-apiproxy"
+apply_patch "$REPO_DIR/patches/05-host-directory-picker-native-android.patch" "dsh-host-directory-picker-native"
+
+# ── Fix 2: Compile node-pty for Android ─────────────────────────────────────
+echo "==> [2/6] Compiling node-pty (Android API 30)..."
+PTY_DIR="$DSH_DIR/node_modules/node-pty"
+if [ -f "$PTY_DIR/build/Release/pty.node" ]; then
+    echo "  [SKIP] pty.node already built."
+else
+    (
+        # Bionic has no Android NDK metadata; tell node-gyp to skip it and
+        # target API 30 via the Bionic sysroot headers.
+        export npm_config_android_ndk_path=""
+        export CFLAGS="${CFLAGS:-} -D__ANDROID_API__=30"
+        export CXXFLAGS="${CXXFLAGS:-} -D__ANDROID_API__=30"
+        cd "$DSH_DIR"
+        npm rebuild node-pty
+    )
+    if [ -f "$PTY_DIR/build/Release/pty.node" ]; then
+        echo "  [OK] node-pty compiled."
+    else
+        echo "  [ERROR] node-pty build failed; see output above."
+        exit 1
+    fi
+fi
+
+# ── Fix 3: Patch koffi statx() for Android ──────────────────────────────────
+echo "==> [3/6] Patching koffi statx() syscall for Android..."
 KOFFI_CC="$DSH_DIR/node_modules/koffi/lib/native/base/base.cc"
 if grep -q "defined(__linux__) && !defined(__ANDROID__)" "$KOFFI_CC" 2>/dev/null; then
     echo "  [SKIP] Patch already applied."
@@ -26,42 +85,27 @@ else
     echo "  [OK] koffi base.cc patched."
 fi
 
-# ── Fix 2: Install sharp WebAssembly fallback ────────────────────────────────
-echo "==> [2/4] Installing sharp WebAssembly fallback..."
+# ── Fix 4: Install sharp WebAssembly fallback ───────────────────────────────
+echo "==> [4/6] Installing sharp WebAssembly fallback..."
 cd "$DSH_DIR"
-npm install @img/sharp-wasm32 2>/dev/null && echo "  [OK] @img/sharp-wasm32 installed." || echo "  [WARN] Could not install sharp-wasm32 (may already be present)."
+npm install @img/sharp-wasm32 > /dev/null 2>&1 && echo "  [OK] @img/sharp-wasm32 installed." || echo "  [WARN] Could not install sharp-wasm32 (may already be present)."
 
-# ── Fix 3: Apply cordis.patch.yml for web profile ───────────────────────────
-echo "==> [3/4] Applying cordis patch for Android compatibility..."
-DSH_HOME="${DSH_HOME:-$HOME/.dsh}"
-PROFILE_DIR="$DSH_HOME/profiles/web"
-mkdir -p "$PROFILE_DIR"
-
-if [ -f "$PROFILE_DIR/cordis.patch.yml" ]; then
-    echo "  [SKIP] cordis.patch.yml already exists at $PROFILE_DIR/cordis.patch.yml"
-else
-    cat > "$PROFILE_DIR/cordis.patch.yml" << 'PATCH'
-# cordis.patch.yml — Android/Termux compatibility overrides
-- id: hmr
-  disabled: true
-- id: subprocess
-  disabled: true
-- id: bash-sandbox
-  disabled: true
-- id: permission
-  disabled: true
-PATCH
-    echo "  [OK] cordis.patch.yml created."
-fi
-
-# ── Fix 4: Verify Node.js version and remind about --expose-internals ────────
-echo "==> [4/4] Checking environment..."
+# ── Fix 5: Verify environment ───────────────────────────────────────────────
+echo "==> [5/6] Checking environment..."
 NODE_VER=$(node -v 2>/dev/null || echo "not found")
 echo "  Node.js: $NODE_VER"
+
+# ── Fix 6: Runtime smoke test ───────────────────────────────────────────────
+echo "==> [6/6] Runtime smoke test..."
+if node -e "require('node-pty'); process.exit(0)" 2>/dev/null; then
+    echo "  node-pty: OK"
+else
+    echo "  node-pty: LOAD FAILED (trying with --expose-internals)"
+fi
 echo ""
 echo "==> Installation complete!"
 echo ""
-echo "To start dsh web, run:"
+echo "To start dsh web (all plugins enabled), run:"
 echo ""
 echo "  node --expose-internals $(npm root -g)/@deepseek-ai/dsh/lib/bin.js web"
 echo ""

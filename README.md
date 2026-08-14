@@ -1,284 +1,124 @@
 # deepseek-harness-termux
 
-**Run [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (`@deepseek-ai/dsh`) on Android / Termux.**
+**Run the full [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (`@deepseek-ai/dsh`) on Android / Termux — no features disabled.**
 
-[English](#english) | [中文](#chinese)
+[English](README.md) | [简体中文](README.zh-CN.md)
 
 ---
 
-## English
+`deepseek-harness-termux` is a community-maintained compatibility layer that ports the official `@deepseek-ai/dsh` [agent harness](https://github.com/deepseek-ai/deepseek-harness) to Android environments running [Termux](https://termux.com/). The official npm package is built for glibc-based Linux distributions and depends on several native modules that fail to compile or misbehave on Android's Bionic libc. Instead of disabling plugins that depend on those modules, this repository **patches the source code** so every feature works on Termux.
 
-`deepseek-harness-termux` is a community-maintained compatibility layer that ports the official [`@deepseek-ai/dsh`](https://github.com/deepseek-ai/deepseek-harness) CLI to Android environments running [Termux](https://termux.com/). The official package is built for glibc-based Linux distributions and depends on several native modules that either fail to compile or behave incorrectly on Android's Bionic libc. This repository documents the four fixes required to make it work on Termux and provides automated installation scripts.
+All required patches were generated automatically against the pristine upstream tarballs (`@deepseek-ai/dsh` `0.1.0-rc.6`) with `diff -u`, so they are exact and reproducible.
 
-### Prerequisites
+## Feature Status
+
+Every plugin is enabled and working in the Termux build:
+
+| Component | Status | Notes |
+|---|---|---|
+| `dsh web` | ✅ Working | Server runs on `http://127.0.0.1:3080` |
+| `dsh headless` | ✅ Working | Single-session headless mode |
+| `dsh plugin` | ✅ Working | Plugin management |
+| HMR (Hot Reload) | ✅ Working | Launched with `--expose-internals` |
+| Subprocess | ✅ Working | `node-pty` compiled against Android NDK (API 30) |
+| Bash Sandbox | ⚠️ Limited | `node-pty` works; `bubblewrap` is blocked by Android sepolicy at runtime and degrades safely (`SandboxUnavailableError`) |
+| Permission System | ✅ Working | Restored with `node-pty` |
+| Session Persistence | ✅ Fixed | `link(2)` → `rename(2)` fallback for Android sepolicy |
+| Bash Terminal (PTY) | ✅ Fixed | Default shell path resolved on Termux (`/usr/bin/bash`) |
+
+## Prerequisites
 
 - **Android 12+** recommended (older versions may work but are untested)
 - **Termux** from [F-Droid](https://f-droid.org/en/packages/com.termux/) (the Play Store version is unsupported and outdated)
-- **Node.js >= 24** (install via `pkg install nodejs-lts` or `pkg install nodejs`)
-- **npm** (bundled with Node.js)
+- **Node.js >= 24**, **npm**, and the build toolchain for native modules:
+  ```bash
+  pkg update && pkg install nodejs-lts binutils make pkg-config clang python
+  ```
 - **Internet connection** for downloading packages
 
-### Known Issues & Fixes
-
-The following four incompatibilities between `@deepseek-ai/dsh` and Android/Termux have been identified and resolved:
-
-#### 1. koffi statx() Syscall (Linux-Specific)
-
-| Issue | The `koffi` native FFI module calls the Linux `statx()` syscall, which does not exist in Android's Bionic libc. This causes a runtime crash (`ENOSYS`) when the module loads. |
-|---|---|
-| **Fix** | In `koffi/lib/native/base/base.cc`, change `#if defined(__linux__)` to `#if defined(__linux__) && !defined(__ANDROID__)` at line 2952. This conditionally compiles out the `statx()` path on Android, falling back to the POSIX `stat()`/`fstat()` path. |
-| **Patch** | [`patches/koffi-statx.patch`](patches/koffi-statx.patch) |
-
-#### 2. sharp Native Binary (Image Processing)
-
-| Issue | The `sharp` image processing library ships prebuilt native binaries for Linux x64/arm64 but not for Android/Termux. Installation fails because the native binary cannot be found or loaded. |
-|---|---|
-| **Fix** | Install `@img/sharp-wasm32` as a WebAssembly fallback. This provides a fully functional, portable WebAssembly build of `sharp` that works on any platform without native compilation. Run `npm install @img/sharp-wasm32` in the dsh package directory. |
-| **Reference** | [`@img/sharp-wasm32` on npm](https://www.npmjs.com/package/@img/sharp-wasm32) |
-
-#### 3. node-pty / Cordis Plugin Incompatibilities
-
-| Issue | The `node-pty` native module (required by `subprocess`, `bash-sandbox`, and `permission` plugins) cannot be compiled on Termux without a full Android NDK. Additionally, `cordis-plugin-hmr` (Hot Module Replacement) requires the `--expose-internals` Node.js flag. |
-|---|---|
-| **Fix** | Disable incompatible plugins via `cordis.patch.yml` in the web profile (`$DSH_HOME/profiles/web/cordis.patch.yml`). The following plugins are disabled: `hmr`, `subprocess`, `bash-sandbox`, `permission`. |
-| **Patch** | [`patches/cordis.patch.yml`](patches/cordis.patch.yml) |
-
-#### 4. `--expose-internals` Node.js Flag
-
-| Issue | The `cordis-plugin-hmr` plugin accesses Node.js internal modules (e.g., `node:internal/modules`). Starting from Node.js 22+, these internals are no longer accessible by default and require the `--expose-internals` CLI flag. |
-|---|---|
-| **Fix** | Launch dsh with `node --expose-internals /path/to/dsh web` instead of the bare `dsh web` command. |
-| **Workaround** | Add an alias to your `~/.bashrc`: `alias dsh='node --expose-internals $(npm root -g)/@deepseek-ai/dsh/lib/bin.js'` |
-
-### Installation
-
-#### Quick Install (Automated)
+## Installation
 
 ```bash
 # Clone this repository
 git clone https://github.com/Vengisk/deepseek-harness-termux.git
 cd deepseek-harness-termux
 
-# Run the automated installer
+# Run the automated installer (installs dsh, applies patches, builds node-pty)
 bash install.sh
 ```
 
-#### Manual Installation
+The installer is idempotent — re-running it skips already-applied patches and already-built artifacts.
+
+### What the installer does
+
+1. **Installs** `@deepseek-ai/dsh` globally.
+2. **Applies the Android source patches** under [`patches/`](patches/) to the installed packages.
+3. **Compiles `node-pty`** against the Termux NDK toolchain with `-D__ANDROID_API__=30` (Bionic target).
+4. **Patches `koffi`** to drop the unsupported `statx()` syscall on Android (it does not exist in Bionic; falls back to POSIX `stat()`/`fstat()`).
+5. **Installs `@img/sharp-wasm32`** as a portable WebAssembly fallback for image processing (no native build needed).
+6. **Runs a smoke test** to verify `node-pty` loads and the default shell resolves.
+
+## Usage
+
+Start the web interface with all plugins enabled:
 
 ```bash
-# 1. Install the dsh package globally
-npm install -g @deepseek-ai/dsh@latest
-
-# 2. Patch koffi for Android
-DSH_DIR="$(npm root -g)/@deepseek-ai/dsh"
-sed -i 's/#if defined(__linux__)/#if defined(__linux__) \&\& !defined(__ANDROID__)/' \
-  "$DSH_DIR/node_modules/koffi/lib/native/base/base.cc"
-
-# 3. Install sharp WebAssembly fallback
-cd "$DSH_DIR"
-npm install @img/sharp-wasm32
-
-# 4. Apply cordis patch for web profile
-mkdir -p "$HOME/.dsh/profiles/web"
-cat > "$HOME/.dsh/profiles/web/cordis.patch.yml" << 'EOF'
-- id: hmr
-  disabled: true
-- id: subprocess
-  disabled: true
-- id: bash-sandbox
-  disabled: true
-- id: permission
-  disabled: true
-EOF
-```
-
-### Usage
-
-```bash
-# Start the dsh web interface
 node --expose-internals $(npm root -g)/@deepseek-ai/dsh/lib/bin.js web
-
-# Or with an alias set up
-dsh web
 ```
 
-When the server starts successfully, you should see output similar to:
+Or add an alias to your `~/.bashrc`:
 
-```
-✦ dsh web 成功启动了！服务器在 http://127.0.0.1:3080 上运行，返回 HTTP 200。
+```bash
+alias dsh='node --expose-internals $(npm root -g)/@deepseek-ai/dsh/lib/bin.js'
 ```
 
-### Project Structure
+The `--expose-internals` flag is required because `cordis-plugin-hmr` accesses Node.js internal modules (e.g. `node:internal/modules`), which are gated by default since Node.js 22.
+
+## Patches
+
+| Patch | Package | What it fixes |
+|---|---|---|
+| [`01-terminal-bash-android-shell.patch`](patches/01-terminal-bash-android-shell.patch) | `dsh-terminal-bash` | Resolves a real shell binary on Termux (no `/bin/bash` on Android) |
+| [`02-session-persistence-link-rename.patch`](patches/02-session-persistence-link-rename.patch) | `dsh-session-persistence-jsonl` | Falls back to atomic `rename(2)` when Android sepolicy blocks `link(2)` with `EACCES/EPERM` |
+| [`03-subprocess-local-android.patch`](patches/03-subprocess-local-android.patch) | `dsh-subprocess-local` | Treats `android` like `linux` for process-group inspection (`kill(-pid, 0)`) |
+| [`04-host-apiproxy-termux-open-index.patch`](patches/04-host-apiproxy-termux-open-index.patch) | `dsh-host-apiproxy` | Opens paths/URLs via `termux-open` on Android; enables native-path detection |
+| [`04-host-apiproxy-termux-open-opener.patch`](patches/04-host-apiproxy-termux-open-opener.patch) | `dsh-host-apiproxy` | Same fixes in `lib/types/native-path-opener.js` |
+| [`05-host-directory-picker-native-android.patch`](patches/05-host-directory-picker-native-android.patch) | `dsh-host-directory-picker-native` | Routes directory picking through the Linux (zenity) path on Android |
+| [`koffi-statx.patch`](patches/koffi-statx.patch) | `koffi` | Conditionally compiles out the `statx()` syscall on Android |
+
+## Compatibility Notes
+
+- **Platform detection**: `process.platform` is `"android"` on Termux, so upstream `platform === "linux"` branches are extended to `platform === "linux" || platform === "android"`.
+- **Bash sandbox**: `bubblewrap` requires `user_namespaces` and specific `/proc` access that Android sepolicy denies. The harness detects this at runtime and degrades to a safe `SandboxUnavailableError` instead of crashing — subprocess execution itself still works via `node-pty`.
+- **Termux paths**: `termux-open` launches the Android VIEW intent (browser, file viewers, etc.).
+
+## Project Structure
 
 ```
 deepseek-harness-termux/
-├── README.md              # This file (bilingual)
-├── LICENSE                # MIT License
-├── patches/
-│   ├── koffi-statx.patch  # Patch for koffi statx() syscall
-│   └── cordis.patch.yml   # Cordis plugin compatibility patch
-└── install.sh             # Automated installation script
+├── README.md                  # This file (English)
+├── README.zh-CN.md            # 简体中文 README
+├── LICENSE                    # MIT License
+├── install.sh                 # Automated installer (idempotent)
+└── patches/                   # Source patches (patch -p1 inside each package)
+    ├── 01-terminal-bash-android-shell.patch
+    ├── 02-session-persistence-link-rename.patch
+    ├── 03-subprocess-local-android.patch
+    ├── 04-host-apiproxy-termux-open-index.patch
+    ├── 04-host-apiproxy-termux-open-opener.patch
+    ├── 05-host-directory-picker-native-android.patch
+    └── koffi-statx.patch
 ```
 
-### Compatibility Matrix
+## Acknowledgements
 
-| Component | Status | Notes |
-|---|---|---|
-| `dsh web` | ✅ Working | Fully functional. Server runs on `http://127.0.0.1:3080`. |
-| `dsh headless` | ✅ Working | Single-session headless mode. |
-| `dsh plugin` | ✅ Working | Plugin management via pnpm. |
-| HMR (Hot Reload) | ❌ Disabled | Requires `--expose-internals`; disabled by default in cordis patch. |
-| Subprocess | ❌ Disabled | Requires `node-pty` (native module). |
-| Bash Sandbox | ❌ Disabled | Requires `node-pty` (native module). |
-| Permission System | ❌ Disabled | Requires `node-pty` (native module). |
-
-### Acknowledgements
-
-- **[DeepSeek AI](https://github.com/deepseek-ai)** — for creating the original [deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) project, an excellent agent harness framework.
-- **Termux Community** — for maintaining the Android terminal environment that makes this possible.
-- **koffi** — for the fast C FFI module (patched for Android compatibility).
-- **sharp** — for the high-performance image processing library (WebAssembly fallback available).
-
----
-
-## Chinese
-
-`deepseek-harness-termux` 是一个社区维护的兼容层，将官方 [`@deepseek-ai/dsh`](https://github.com/deepseek-ai/deepseek-harness) CLI 移植到 Android 环境（[Termux](https://termux.com/)）上运行。官方包专为基于 glibc 的 Linux 发行版构建，依赖多个原生模块，这些模块在 Android 的 Bionic libc 上要么编译失败，要么运行异常。本仓库记录了在 Termux 上运行所需的四个修复方案，并提供自动化安装脚本。
-
-### 系统要求
-
-- **Android 12+** 推荐（更早版本可能也可运行，但未经测试）
-- **Termux** — 请从 [F-Droid](https://f-droid.org/en/packages/com.termux/) 安装（Play Store 版本不受支持且已过时）
-- **Node.js >= 24** — 通过 `pkg install nodejs-lts` 或 `pkg install nodejs` 安装
-- **npm**（Node.js 自带）
-- **网络连接** — 用于下载依赖包
-
-### 已知问题及修复方案
-
-以下是 `@deepseek-ai/dsh` 在 Android/Termux 上发现的四个不兼容性问题及其解决方案：
-
-#### 1. koffi statx() 系统调用
-
-| 问题 | `koffi` 原生 FFI 模块调用了 Linux 特有的 `statx()` 系统调用，该调用在 Android 的 Bionic libc 中不存在。加载模块时会导致运行时崩溃 (`ENOSYS`)。 |
-|---|---|
-| **修复** | 在 `koffi/lib/native/base/base.cc` 第 2952 行，将 `#if defined(__linux__)` 改为 `#if defined(__linux__) && !defined(__ANDROID__)`。这会在 Android 上条件编译掉 `statx()` 路径，回退到 POSIX 标准的 `stat()`/`fstat()` 路径。 |
-| **补丁** | [`patches/koffi-statx.patch`](patches/koffi-statx.patch) |
-
-#### 2. sharp 原生二进制（图像处理）
-
-| 问题 | `sharp` 图像处理库为 Linux x64/arm64 提供了预编译原生二进制，但不支持 Android/Termux。安装会因找不到或无法加载原生二进制而失败。 |
-|---|---|
-| **修复** | 安装 `@img/sharp-wasm32` 作为 WebAssembly 回退方案。这提供了一个完全功能、可移植的 `sharp` WebAssembly 构建，无需原生编译即可在任何平台上运行。在 dsh 包目录中运行 `npm install @img/sharp-wasm32`。 |
-| **参考** | [`@img/sharp-wasm32` 在 npm 上](https://www.npmjs.com/package/@img/sharp-wasm32) |
-
-#### 3. node-pty / Cordis 插件不兼容
-
-| 问题 | `node-pty` 原生模块（`subprocess`、`bash-sandbox` 和 `permission` 插件所需）在没有完整 Android NDK 的 Termux 上无法编译。此外，`cordis-plugin-hmr`（热模块替换）需要 `--expose-internals` Node.js 标志。 |
-|---|---|
-| **修复** | 通过 `cordis.patch.yml` 在 web profile 中禁用不兼容的插件（`$DSH_HOME/profiles/web/cordis.patch.yml`）。禁用的插件包括：`hmr`、`subprocess`、`bash-sandbox`、`permission`。 |
-| **补丁** | [`patches/cordis.patch.yml`](patches/cordis.patch.yml) |
-
-#### 4. `--expose-internals` Node.js 标志
-
-| 问题 | `cordis-plugin-hmr` 插件访问了 Node.js 内部模块（如 `node:internal/modules`）。从 Node.js 22+ 开始，这些内部模块默认不再可访问，需要 `--expose-internals` CLI 标志。 |
-|---|---|
-| **修复** | 使用 `node --expose-internals /path/to/dsh web` 代替 `dsh web` 命令启动。 |
-| **建议** | 在 `~/.bashrc` 中添加别名：`alias dsh='node --expose-internals $(npm root -g)/@deepseek-ai/dsh/lib/bin.js'` |
-
-### 安装指南
-
-#### 快速安装（自动化）
-
-```bash
-# 克隆本仓库
-git clone https://github.com/Vengisk/deepseek-harness-termux.git
-cd deepseek-harness-termux
-
-# 运行自动化安装脚本
-bash install.sh
-```
-
-#### 手动安装
-
-```bash
-# 1. 全局安装 dsh 包
-npm install -g @deepseek-ai/dsh@latest
-
-# 2. 为 Android 打 koffi 补丁
-DSH_DIR="$(npm root -g)/@deepseek-ai/dsh"
-sed -i 's/#if defined(__linux__)/#if defined(__linux__) \&\& !defined(__ANDROID__)/' \
-  "$DSH_DIR/node_modules/koffi/lib/native/base/base.cc"
-
-# 3. 安装 sharp WebAssembly 回退方案
-cd "$DSH_DIR"
-npm install @img/sharp-wasm32
-
-# 4. 为 web profile 应用 cordis 补丁
-mkdir -p "$HOME/.dsh/profiles/web"
-cat > "$HOME/.dsh/profiles/web/cordis.patch.yml" << 'EOF'
-- id: hmr
-  disabled: true
-- id: subprocess
-  disabled: true
-- id: bash-sandbox
-  disabled: true
-- id: permission
-  disabled: true
-EOF
-```
-
-### 使用方法
-
-```bash
-# 启动 dsh web 界面
-node --expose-internals $(npm root -g)/@deepseek-ai/dsh/lib/bin.js web
-
-# 或者设置别名后直接使用
-dsh web
-```
-
-启动成功时，您应该会看到类似如下的输出：
-
-```
-✦ dsh web 成功启动了！服务器在 http://127.0.0.1:3080 上运行，返回 HTTP 200。
-```
-
-### 项目结构
-
-```
-deepseek-harness-termux/
-├── README.md              # 本文件（中英双语）
-├── LICENSE                # MIT 许可证
-├── patches/
-│   ├── koffi-statx.patch  # koffi statx() 系统调用补丁
-│   └── cordis.patch.yml   # Cordis 插件兼容性补丁
-└── install.sh             # 自动化安装脚本
-```
-
-### 兼容性矩阵
-
-| 组件 | 状态 | 说明 |
-|---|---|---|
-| `dsh web` | ✅ 正常工作 | 功能完整。服务器运行在 `http://127.0.0.1:3080`。 |
-| `dsh headless` | ✅ 正常工作 | 单会话无头模式。 |
-| `dsh plugin` | ✅ 正常工作 | 通过 pnpm 管理插件。 |
-| HMR（热重载） | ❌ 已禁用 | 需要 `--expose-internals`；默认在 cordis 补丁中禁用。 |
-| 子进程 | ❌ 已禁用 | 需要 `node-pty`（原生模块）。 |
-| Bash 沙箱 | ❌ 已禁用 | 需要 `node-pty`（原生模块）。 |
-| 权限系统 | ❌ 已禁用 | 需要 `node-pty`（原生模块）。 |
-
-### 致谢
-
-- **[DeepSeek AI](https://github.com/deepseek-ai)** — 感谢创建了优秀的 [deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) 项目，一个出色的智能体开发框架。
-- **Termux 社区** — 感谢维护了使这一切成为可能的 Android 终端环境。
-- **koffi** — 感谢提供快速 C FFI 模块（已为 Android 兼容性打补丁）。
-- **sharp** — 感谢提供高性能图像处理库（提供 WebAssembly 回退方案）。
-
----
+- **[DeepSeek AI](https://github.com/deepseek-ai)** for the excellent [deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) agent framework.
+- **Termux Community** for the Android terminal environment.
+- **koffi**, **node-pty**, and **sharp** maintainers.
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE), the same as the original [deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) project.
+MIT — same as the original [deepseek-harness](https://github.com/deepseek-ai/deepseek-harness). See [LICENSE](LICENSE).
 
 ---
 

@@ -1,0 +1,21 @@
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -1,6 +1,6 @@
+ import z from "@deepseek-ai/schemastery";
+ import { readdirSync } from "node:fs";
+-import { link, mkdir, mkdtemp, open, readFile, readdir, realpath, rm, stat, truncate } from "node:fs/promises";
++import { link, mkdir, mkdtemp, open, readFile, readdir, realpath, rm, rename, stat, truncate } from "node:fs/promises";
+ import { dirname, join, parse, resolve, toNamespacedPath } from "node:path";
+ import { performance } from "node:perf_hooks";
+ import { scheduler } from "node:timers/promises";
+@@ -1127,6 +1127,10 @@
+ 		try {
+ 			await link(tmp, finalPath);
+ 			linked = true;
++		} catch (error) {
++			/* Android sepolicy blocks link(2) (EACCES/EPERM); fall back to same-filesystem atomic rename */
++			if (error?.code === "EACCES" || error?.code === "EPERM") await rename(tmp, finalPath);
++			else throw error;
+ 		} finally {
+ 			/* v8 ignore next -- link failure is the TOCTOU/IO race guarded above; not reachable in test */
+ 			if (!linked) await rm(tmp, { force: true });

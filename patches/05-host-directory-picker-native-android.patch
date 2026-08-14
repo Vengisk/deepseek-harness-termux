@@ -1,0 +1,11 @@
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -241,7 +241,7 @@
+ 		throw error;
+ 	}
+ 	if (platform === "win32") return await (internals.pickWin32Dialog ?? pickWin32Directory)(signal);
+-	if (platform === "linux") {
++	if (platform === "linux" || platform === "android") {
+ 		try {
+ 			return outputPath((await run("zenity", [
+ 				"--file-selection",

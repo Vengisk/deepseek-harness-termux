@@ -1,0 +1,32 @@
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -772,6 +772,12 @@
+ 		await run(browser, [path], signal);
+ 		return true;
+ 	}
++	if (platform === "android") {
++		// Termux ships termux-open; it resolves the Android VIEW intent for
++		// the default application, which is usually the browser.
++		await run("termux-open", [path], signal);
++		return true;
++	}
+ 	return false;
+ }
+ /** PowerShell single-quoted literal (doubles embedded quotes). */
+@@ -819,7 +825,7 @@
+ 		await openWindowsPath(path, signal, run);
+ 		return;
+ 	}
+-	if (platform === "linux") {
++	if (platform === "linux" || platform === "android") {
+ 		if (wsl) {
+ 			await openWslPath(path, signal, run);
+ 			return;
+@@ -843,6 +849,7 @@
+ function canOpenNativePath(internals = {}) {
+ 	const platform = internals.platform ?? process.platform;
+ 	if (platform === "darwin" || platform === "win32") return true;
++	if (platform === "android") return true;
+ 	if (platform !== "linux") return false;
+ 	const env = internals.env ?? process.env;
+ 	return isWsl(internals) || present(env.DISPLAY) || present(env.WAYLAND_DISPLAY);

@@ -1,0 +1,33 @@
+--- a/lib/types/native-path-opener.js
++++ b/lib/types/native-path-opener.js
+@@ -55,6 +55,12 @@
+         await run(browser, [path], signal);
+         return true;
+     }
++    if (platform === 'android') {
++        // Termux ships termux-open; it resolves the Android VIEW intent for
++        // the default application, which is usually the browser.
++        await run('termux-open', [path], signal);
++        return true;
++    }
+     // Windows names no browser without reading the UserChoice registry, and its
+     // .html association is the browser in the ordinary case.
+     return false;
+@@ -108,7 +114,7 @@
+         await openWindowsPath(path, signal, run);
+         return;
+     }
+-    if (platform === 'linux') {
++    if (platform === 'linux' || platform === 'android') {
+         if (wsl) {
+             await openWslPath(path, signal, run);
+             return;
+@@ -133,6 +139,8 @@
+     const platform = internals.platform ?? process.platform;
+     if (platform === 'darwin' || platform === 'win32')
+         return true;
++    if (platform === 'android')
++        return true;
+     if (platform !== 'linux')
+         return false;
+     const env = internals.env ?? process.env;
