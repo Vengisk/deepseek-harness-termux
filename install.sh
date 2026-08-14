@@ -1,54 +1,88 @@
 #!/usr/bin/env bash
-# install.sh — Full-feature installation of @deepseek-ai/dsh on Android/Termux
+# install.sh — Fully automated install of @deepseek-ai/dsh on Android/Termux
 # Usage: bash install.sh
 #
 # This script installs dsh with ALL plugins enabled (HMR, subprocess, bash
-# sandbox, permission). It applies the source patches under ./patches so the
-# Termux build has real functionality instead of disabled plugins.
-#
-# Steps:
-#   1. Check system dependencies (cmake, python, patch, etc.)
-#   2. Install @deepseek-ai/dsh globally (npm >= 26 ships --expose-internals)
-#   3. Apply Android source patches to the installed packages (idempotent)
-#   4. Compile node-pty with the Android NDK toolchain (CFLAGS target API 30)
-#   5. Patch koffi statx() for Android (statx is unavailable on Bionic)
-#   6. Install sharp WebAssembly fallback
-#   7. Verify the environment
-#   8. Runtime smoke test (node-pty load)
+# sandbox, permission). It automatically detects and installs the Android NDK
+# (ndk-sysroot), C toolchain (clang, binutils), and all build-time dependencies.
+# Environment variables for node-gyp are set automatically so native addons
+# (node-pty, koffi) compile against the Termux Bionic sysroot.
 
 set -euo pipefail
 
-cd "$(dirname "$0")"
-REPO_DIR="$(pwd)"
+REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# ── Dependency check ─────────────────────────────────────────────────────────
-echo "==> [0/8] Checking system dependencies..."
-MISSING=()
-for cmd in cmake python3 make pkg-config patch git; do
-    if command -v "$cmd" > /dev/null 2>&1; then
-        echo "  [OK] $cmd"
+# ── Helpers ──────────────────────────────────────────────────────────────────
+
+pkg_installed() {
+    dpkg -s "$1" > /dev/null 2>&1
+}
+
+cmd_exists() {
+    command -v "$1" > /dev/null 2>&1
+}
+
+# ── Step 0: Install system dependencies ─────────────────────────────────────
+echo "==> [0/8] Checking & installing system dependencies..."
+
+# Packages to install via pkg (both metapackages and individual tools)
+SYSTEM_PKGS=(
+    ndk-sysroot    # Android NDK platform headers/libs (Bionic sysroot)
+    clang          # C/C++ compiler (LLVM/Clang for Termux)
+    binutils       # ar, strip, etc. (needed by node-gyp)
+    cmake          # Native addon build system
+    make           # Build tool
+    python3        # node-gyp configure scripts
+    pkg-config     # Library discovery
+    patch          # Apply source patches
+    git            # Version check / metadata
+)
+
+# Determine which packages are NOT installed
+PKGS_TO_INSTALL=()
+for pkg in "${SYSTEM_PKGS[@]}"; do
+    if pkg_installed "$pkg"; then
+        echo "  [OK] $pkg"
     else
-        echo "  [MISS] $cmd"
-        MISSING+=("$cmd")
+        echo "  [MISS] $pkg"
+        PKGS_TO_INSTALL+=("$pkg")
     fi
 done
 
-if [ ${#MISSING[@]} -gt 0 ]; then
-    echo "  -> Installing missing dependencies: ${MISSING[*]}"
-    pkg install -y "${MISSING[@]}"
-    echo "  [OK] Dependencies installed."
+if [ ${#PKGS_TO_INSTALL[@]} -gt 0 ]; then
+    echo "  -> Installing: ${PKGS_TO_INSTALL[*]}"
+    pkg install -y "${PKGS_TO_INSTALL[@]}"
+    echo "  [OK] System dependencies installed."
 else
-    echo "  [OK] All dependencies satisfied."
+    echo "  [OK] All system dependencies satisfied."
 fi
 
+# Now verify that key CLI tools are actually on PATH
+# (ndk-sysroot is a header/library package, not a command — no need to check)
+TOOLS=(clang clang++ ar cmake make pkg-config patch git python3)
+TOOLS_MISSING=false
+for tool in "${TOOLS[@]}"; do
+    if cmd_exists "$tool"; then
+        echo "  [OK] $tool ($(command -v "$tool"))"
+    else
+        echo "  [WARN] $tool not found on PATH — may cause build failures"
+        TOOLS_MISSING=true
+    fi
+done
+
+if $TOOLS_MISSING; then
+    echo "  [INFO] Some tools are missing; continuing anyway (they may be installed by pkg hooks)"
+fi
+
+# ── Step 1: Install @deepseek-ai/dsh ────────────────────────────────────────
 echo "==> [1/8] Installing @deepseek-ai/dsh globally..."
 npm install -g @deepseek-ai/dsh@latest
 
 DSH_DIR="$(npm root -g)/@deepseek-ai/dsh"
 DSH_PKGS="$DSH_DIR/node_modules/@deepseek-ai"
-echo "==> Package installed at: $DSH_DIR"
+echo "  [OK] Package installed at: $DSH_DIR"
 
-# ── Helpers ──────────────────────────────────────────────────────────────────
+# ── Patch helpers ────────────────────────────────────────────────────────────
 apply_patch() {
     local patch="$1" pkg="$2"
     local dir="$DSH_PKGS/$pkg"
@@ -56,7 +90,6 @@ apply_patch() {
         echo "  [WARN] $pkg not found; skipping patch $patch"
         return
     fi
-    # --dry-run first: skip when already applied (idempotent)
     if (cd "$dir" && patch -p1 --dry-run --forward < "$patch" > /dev/null 2>&1); then
         (cd "$dir" && patch -p1 --forward < "$patch")
         echo "  [OK] $patch -> $pkg"
@@ -65,7 +98,7 @@ apply_patch() {
     fi
 }
 
-# ── Fix 1: Android source patches ────────────────────────────────────────────
+# ── Step 2: Apply Android patches ────────────────────────────────────────────
 echo "==> [2/8] Applying Android platform patches..."
 apply_patch "$REPO_DIR/patches/01-terminal-bash-android-shell.patch"        "dsh-terminal-bash"
 apply_patch "$REPO_DIR/patches/02-session-persistence-link-rename.patch"     "dsh-session-persistence-jsonl"
@@ -74,31 +107,62 @@ apply_patch "$REPO_DIR/patches/04-host-apiproxy-termux-open-index.patch"     "ds
 apply_patch "$REPO_DIR/patches/04-host-apiproxy-termux-open-opener.patch"    "dsh-host-apiproxy"
 apply_patch "$REPO_DIR/patches/05-host-directory-picker-native-android.patch" "dsh-host-directory-picker-native"
 
-# ── Fix 2: Compile node-pty for Android ─────────────────────────────────────
-echo "==> [3/8] Compiling node-pty (Android API 30)..."
+# ── Step 3: Configure build environment for node-gyp ────────────────────────
+echo "==> [3/8] Configuring native addon build environment..."
+
+# Termux Bionic has no Android NDK metadata; tell node-gyp to skip the full
+# NDK cross-compile and use the Bionic sysroot directly.
+export npm_config_android_ndk_path=""
+
+# Node.js headers for native addon compilation
+NODE_DIR="$(node -e "console.log(require('path').join(require('os').homedir(), '.cache/node-gyp', process.version))" 2>/dev/null || true)"
+if [ -n "$NODE_DIR" ] && [ -d "$NODE_DIR/include/node" ]; then
+    export npm_config_nodedir="$NODE_DIR"
+    echo "  [OK] nodedir = $NODE_DIR"
+fi
+
+# C/C++ flags: target Android API 30 so the NDK headers expose the right
+# API level. This is required for ioctls, termios, and process management
+# (process group, session, etc.) that node-pty depends on.
+export CFLAGS="-D__ANDROID_API__=30"
+export CXXFLAGS="-D__ANDROID_API__=30"
+echo "  [OK] CFLAGS/CXXFLAGS = -D__ANDROID_API__=30"
+
+# Ensure CC/CXX point to Termux clang (they already do by default on Termux,
+# but some node-gyp wrappers may reset them)
+export CC="${CC:-clang}"
+export CXX="${CXX:-clang++}"
+echo "  [OK] CC = $(command -v "$CC" 2>/dev/null || echo "$CC (not on PATH yet)")"
+echo "  [OK] CXX = $(command -v "$CXX" 2>/dev/null || echo "$CXX (not on PATH yet)")"
+
+# ── Step 4: Build node-pty ──────────────────────────────────────────────────
+echo "==> [4/8] Compiling node-pty (Android API 30)..."
 PTY_DIR="$DSH_DIR/node_modules/node-pty"
 if [ -f "$PTY_DIR/build/Release/pty.node" ]; then
     echo "  [SKIP] pty.node already built."
 else
-    (
-        # Bionic has no Android NDK metadata; tell node-gyp to skip it and
-        # target API 30 via the Bionic sysroot headers.
-        export npm_config_android_ndk_path=""
-        export CFLAGS="${CFLAGS:-} -D__ANDROID_API__=30"
-        export CXXFLAGS="${CXXFLAGS:-} -D__ANDROID_API__=30"
-        cd "$DSH_DIR"
-        npm rebuild node-pty
-    )
-    if [ -f "$PTY_DIR/build/Release/pty.node" ]; then
+    echo "  -> Running: npm rebuild node-pty"
+    if (cd "$DSH_DIR" && npm rebuild node-pty 2>&1); then
         echo "  [OK] node-pty compiled."
     else
-        echo "  [ERROR] node-pty build failed; see output above."
+        echo "  [ERROR] node-pty build failed!"
+        echo ""
+        echo "  Common causes and fixes:"
+        echo "  - Missing ndk-sysroot:  pkg install ndk-sysroot"
+        echo "  - Missing binutils:     pkg install binutils"
+        echo "  - Missing clang:        pkg install clang"
+        echo "  - Missing node headers: npm cache clean -f && npm install -g @deepseek-ai/dsh"
+        echo ""
+        echo "  Last 20 lines of the build log:"
+        PTY_LOG="$PTY_DIR/build/Release/obj.target/*.log"
+        # shellcheck disable=SC2086
+        tail -20 $PTY_LOG 2>/dev/null || true
         exit 1
     fi
 fi
 
-# ── Fix 3: Patch koffi statx() for Android ──────────────────────────────────
-echo "==> [4/8] Patching koffi statx() syscall for Android..."
+# ── Step 5: Patch koffi statx() for Android ──────────────────────────────────
+echo "==> [5/8] Patching koffi statx() syscall for Android..."
 KOFFI_CC="$DSH_DIR/node_modules/koffi/lib/native/base/base.cc"
 if grep -q "defined(__linux__) && !defined(__ANDROID__)" "$KOFFI_CC" 2>/dev/null; then
     echo "  [SKIP] Patch already applied."
@@ -107,23 +171,62 @@ else
     echo "  [OK] koffi base.cc patched."
 fi
 
-# ── Fix 4: Install sharp WebAssembly fallback ───────────────────────────────
-echo "==> [5/8] Installing sharp WebAssembly fallback..."
+# ── Step 6: Install sharp WebAssembly fallback ───────────────────────────────
+echo "==> [6/8] Installing sharp WebAssembly fallback..."
 cd "$DSH_DIR"
-npm install @img/sharp-wasm32 > /dev/null 2>&1 && echo "  [OK] @img/sharp-wasm32 installed." || echo "  [WARN] Could not install sharp-wasm32 (may already be present)."
+if npm install @img/sharp-wasm32 > /dev/null 2>&1; then
+    echo "  [OK] @img/sharp-wasm32 installed."
+else
+    echo "  [WARN] Could not install @img/sharp-wasm32 (may already be present)."
+fi
 
-# ── Fix 5: Verify environment ───────────────────────────────────────────────
-echo "==> [6/8] Checking environment..."
+# ── Step 7: Verify environment ───────────────────────────────────────────────
+echo "==> [7/8] Verifying environment..."
 NODE_VER=$(node -v 2>/dev/null || echo "not found")
 echo "  Node.js: $NODE_VER"
+echo "  dsh dir: $DSH_DIR"
 
-# ── Fix 6: Runtime smoke test ───────────────────────────────────────────────
-echo "==> [7/8] Runtime smoke test..."
+# Check that patches are applied
+echo "  Patches:"
+for patch_file in "$REPO_DIR"/patches/*.patch; do
+    name="$(basename "$patch_file")"
+    # Extract the package name from the patch filename (everything after the number)
+    pkg_name="$(echo "$name" | sed -E 's/^[0-9]+-//; s/\.patch$//')"
+    # Map to dsh package directory name
+    case "$pkg_name" in
+        terminal-bash-android-shell)     dir="$DSH_PKGS/dsh-terminal-bash" ;;
+        session-persistence-link-rename) dir="$DSH_PKGS/dsh-session-persistence-jsonl" ;;
+        subprocess-local-android)        dir="$DSH_PKGS/dsh-subprocess-local" ;;
+        host-apiproxy-termux-open-index) dir="$DSH_PKGS/dsh-host-apiproxy" ;;
+        host-apiproxy-termux-open-opener) dir="$DSH_PKGS/dsh-host-apiproxy" ;;
+        host-directory-picker-native-android) dir="$DSH_PKGS/dsh-host-directory-picker-native" ;;
+        *) dir="" ;;
+    esac
+    if [ -n "$dir" ] && [ -d "$dir" ]; then
+        if (cd "$dir" && patch -p1 --dry-run --reverse < "$patch_file" > /dev/null 2>&1); then
+            echo "    [NOT APPLIED] $name"
+        else
+            echo "    [APPLIED] $name"
+        fi
+    else
+        echo "    [SKIP] $name (package not found)"
+    fi
+done
+
+# ── Step 8: Runtime smoke test ───────────────────────────────────────────────
+echo "==> [8/8] Runtime smoke test..."
 if node -e "require('node-pty'); process.exit(0)" 2>/dev/null; then
     echo "  node-pty: OK"
 else
     echo "  node-pty: LOAD FAILED (trying with --expose-internals)"
+    if node --expose-internals -e "require('node-pty'); process.exit(0)" 2>/dev/null; then
+        echo "  node-pty: OK (with --expose-internals)"
+    else
+        echo "  [WARN] node-pty fails to load even with --expose-internals"
+        echo "  This may affect the terminal plugin, but other features may work."
+    fi
 fi
+
 echo ""
 echo "==> Installation complete!"
 echo ""
