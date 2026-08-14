@@ -1,6 +1,6 @@
 # deepseek-harness-termux
 
-**在 Android / Termux 上运行完整的 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)(`@deepseek-ai/dsh`)— 功能不砍、全部可用。**
+**在 Android / Termux 上运行完整的 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)(`@deepseek-ai/dsh`)— 功能完整全部可用。**
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
@@ -49,7 +49,7 @@ bash install.sh
 
 安装脚本是幂等的 —— 重复执行时会跳过已应用的补丁和已构建的产物。
 
-### 安装脚本做了什么
+### 安装脚本原理
 
 1. **全局安装** `@deepseek-ai/dsh`。
 2. **应用 [`patches/`](patches/) 下的 Android 源码补丁**到已安装的各个包。
