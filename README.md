@@ -2,7 +2,7 @@
 
 **Run the full [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (`@deepseek-ai/dsh`) on Android / Termux — no features disabled.**
 
-[English](README.md) | [简体中文](README.zh-CN.md)
+[English] | [简体中文](README.zh-CN.md)
 
 ---
 
