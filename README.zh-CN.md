@@ -1,8 +1,8 @@
 # deepseek-harness-termux
 
-**在 Android / Termux 上运行完整的 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)(`@deepseek-ai/dsh`)— 功能完整全部可用。**
+**在 Android / Termux 上运行完整的 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)(`@deepseek-ai/dsh`)— 核心功能完整全部可用。**
 
-[English](README.md) | [简体中文](README.zh-CN.md)
+[English](README.md) | 简体中文
 
 ---
 
