@@ -1,0 +1,124 @@
+--- a/lib/index.js	1985-10-26 16:15:00.000000000 +0800
++++ b/lib/index.js	2026-08-15 09:34:14.556609965 +0800
+@@ -15,6 +15,34 @@
+ * @module @deepseek-ai/dsh-sandbox-local/profiles
+ */
+ /**
++* Build the proot profile arguments for one file-effect policy.
++*
++* proot uses ptrace-based user-space "bind" (no mount namespaces, no
++* CLONE_NEWUSER), so it works on Android/Termux where bwrap cannot.
++* Translation from bwrap semantics:
++*   --ro-bind / /          ->  -b /:/          (proot binds are read-write
++*                                              by default; read-only is not
++*                                              enforced - proot is a weaker
++*                                              confinement, hence "partial")
++*   --dev /dev             ->  -b /dev:/dev    (pre-existing host /dev)
++*   --proc /proc           ->  -b /proc:/proc  (pre-existing host /proc)
++*   --tmpfs /tmp           ->  -b <termux-tmp>:/tmp  (Termux /tmp is read-only
++*                              on the host; redirect to $PREFIX/tmp so the
++*                              confined process gets a writable /tmp)
++*   --bind <root> <root>   ->  -b <root>:<root>
++* @param policy - file-effect policy to express as proot binds.
++* @returns profile arguments before the trailing separator and command argv.
++*/
++function prootProfileArgs(policy) {
++	const args = ["-b", "/:/", "-b", "/dev:/dev", "-b", "/proc:/proc"];
++	if (policy.mode === "workspace-write") {
++		const termuxTmp = process.env.PREFIX ? process.env.PREFIX + "/tmp" : "/data/data/com.termux/files/usr/tmp";
++		args.push("-b", termuxTmp + ":/tmp");
++		args.push("-b", policy.workspaceRoot + ":" + policy.workspaceRoot);
++	}
++	return args;
++}
++/**
+ * Build the bwrap profile arguments for one file-effect policy.
+ * @param policy - file-effect policy to express as bwrap mounts.
+ * @returns profile arguments before the trailing separator and command argv.
+@@ -114,6 +142,25 @@
+ 	}).status === 0;
+ }
+ /**
++* Probe whether `proot` can create the profile; the provider caches the
++* bounded result.  proot is the Android/Termux fallback runner - it uses
++* ptrace-based user-space binding (no CLONE_NEWUSER, no mount namespaces),
++* so it works where bwrap cannot.  The probe mirrors bwrap's: run a minimal
++* bind profile around `true`.
++*/
++function defaultProbeProot(timeoutMs) {
++	return spawnSync("proot", [
++		"-b", "/:/",
++		"-b", "/dev:/dev",
++		"-b", "/proc:/proc",
++		"true"
++	], {
++		timeout: timeoutMs,
++		stdio: "ignore"
++	}).status === 0;
++}
++
++/**
+ * Functional Seatbelt probe: apply the real `read-only` profile through
+ * `sandbox-exec -p` and run `true` under it — exit 0 means the kernel
+ * accepted and enforced the profile (`sandbox-exec` exits non-zero when
+@@ -174,6 +221,7 @@
+ */
+ const PLATFORM_CHAINS = {
+ 	linux: ["bwrap", "landlock"],
++	android: ["proot", "bwrap", "landlock"],
+ 	darwin: ["seatbelt"],
+ 	win32: ["windows-acl"]
+ };
+@@ -189,6 +237,7 @@
+ const STATIC_ENFORCEMENT = {
+ 	bwrap: "full",
+ 	landlock: "full",
++	proot: "partial",
+ 	seatbelt: "full",
+ 	"windows-acl": "partial"
+ };
+@@ -208,6 +257,7 @@
+ const DENIAL_SIGNATURES = {
+ 	bwrap: ["read-only file system"],
+ 	landlock: ["permission denied"],
++	proot: ["read-only file system", "permission denied"],
+ 	seatbelt: ["operation not permitted"],
+ 	"windows-acl": [
+ 		"access is denied",
+@@ -236,6 +286,7 @@
+ 		fatalSignatures: [`${LAUNCHER_BIN}: `],
+ 		informationalLines: [`${LAUNCHER_BIN}: partial enforcement (older Landlock ABI)`]
+ 	}],
++	proot: [{ fatalSignatures: ["proot: ", "proot warning: "] }],
+ 	seatbelt: [{ fatalSignatures: ["sandbox-exec: "] }],
+ 	"windows-acl": [{
+ 		allowedExitCodes: [127],
+@@ -311,10 +362,11 @@
+ 			runnerFailureRules: [{ fatalSignatures: this.configuredRunnerFailureSignatures }]
+ 		};
+ 		const selected = this.selectRunner(policy.mode);
++		const separator = selected.runner === "proot" ? [] : ["--"];
+ 		return {
+ 			argv: [
+ 				...this.runnerArgv(selected.runner, policy),
+-				"--",
++				...separator,
+ 				...argv
+ 			],
+ 			enforcement: selected.enforcement,
+@@ -326,6 +378,7 @@
+ 	runnerArgv(runner, policy) {
+ 		switch (runner) {
+ 			case "bwrap": return ["bwrap", ...bwrapProfileArgs(policy)];
++		case "proot": return ["proot", ...prootProfileArgs(policy)];
+ 			case "landlock": return [this.landlockLauncher(), ...landlockProfileArgs(policy)];
+ 			case "seatbelt": return [this.seatbeltExec(), ...seatbeltProfileArgs(policy)];
+ 			case "windows-acl": return this.windowsAclRunnerArgv(policy);
+@@ -504,6 +557,7 @@
+ 	probeRunner(runner) {
+ 		switch (runner) {
+ 			case "bwrap": return (this.internals.probeBwrap ?? (() => defaultProbeBwrap(this.probeTimeoutMs)))() ? "full" : "unusable";
++		case "proot": return (this.internals.probeProot ?? (() => defaultProbeProot(this.probeTimeoutMs)))() ? "partial" : "unusable";
+ 			case "landlock": return (this.internals.probeLandlock ?? ((launcher) => probe(launcher, { timeoutMs: this.probeTimeoutMs })))(this.landlockLauncher());
+ 			case "seatbelt": return (this.internals.probeSeatbelt ?? ((exec) => defaultProbeSeatbelt(exec, this.probeTimeoutMs)))(this.seatbeltExec()) ? "full" : "unusable";
+ 			case "windows-acl": return (this.internals.probeWindowsAcl ?? (() => defaultProbeWindowsAcl(this.windowsAclRunnerInvocation(), this.probeTimeoutMs)))() ? "partial" : "unusable";

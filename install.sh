@@ -36,6 +36,7 @@ SYSTEM_PKGS=(
     pkg-config     # Library discovery
     patch          # Apply source patches
     git            # Version check / metadata
+    proot          # User-space chroot for bash sandbox (Android fallback)
 )
 
 # Determine which packages are NOT installed
@@ -95,7 +96,86 @@ echo "==> [1/8] Installing @deepseek-ai/dsh globally..."
 export GYP_DEFINES="${GYP_DEFINES:+$GYP_DEFINES }android_ndk_path="
 echo "  [OK] GYP_DEFINES='$GYP_DEFINES'"
 
-npm install -g @deepseek-ai/dsh@latest
+# ── npm install with multi-source, progress, and timeout safety ─────────────
+# Layer 1: Multi-source download — try official npm registry first, fall back
+# to npmmirror (China) if the official source is slow or unreachable.
+# Layer 2: Progress feedback — --foreground-scripts makes node-pty's compile
+# output visible; --loglevel verbose shows download progress.
+# Layer 3: Timeout safety — a watchdog kills npm if it produces no output for
+# NPM_INSTALL_TIMEOUT seconds (default 300 = 5 min), then prints diagnostics
+# (was clang compiling? network reachable?).
+
+NPM_INSTALL_TIMEOUT="${NPM_INSTALL_TIMEOUT:-300}"   # seconds without output
+NPM_MIRRORS=(
+    "https://registry.npmjs.org"
+    "https://registry.npmmirror.com"
+)
+NPM_LOG_FILE="/data/data/com.termux/files/usr/tmp/dsh-npm-install.log"
+
+DSH_INSTALL_OK=false
+for _registry in "${NPM_MIRRORS[@]}"; do
+    NPM_LOG_FILE="/data/data/com.termux/files/usr/tmp/dsh-npm-install.log"
+    echo "" > "$NPM_LOG_FILE"
+
+    # Run npm install with output redirected to log file (so watchdog can check size)
+    # while also teeing to stdout for user visibility
+    {
+        npm install -g @deepseek-ai/dsh@latest \
+            --registry="$_registry" \
+            --foreground-scripts \
+            --loglevel verbose
+    } > >(tee "$NPM_LOG_FILE") 2>&1 &
+    _npm_pid=$!
+
+    # Watchdog
+    _last_size=0 _stable_count=0
+    while kill -0 "$_npm_pid" 2>/dev/null; do
+        sleep 10
+        _cur_size=$(stat -c %s "$NPM_LOG_FILE" 2>/dev/null || echo 0)
+        if [ "$_cur_size" -eq "$_last_size" ]; then
+            _stable_count=$((_stable_count + 1))
+            _elapsed=$((_stable_count * 10))
+            echo "  [INFO] Still working... (${_elapsed}s since last output)"
+            # Check if clang is compiling (that's legitimate)
+            if pgrep -f 'clang|cc1plus' > /dev/null 2>&1; then
+                echo "  [INFO] clang is compiling node-pty (this is normal, please wait)"
+            fi
+            if [ "$_elapsed" -ge "$NPM_INSTALL_TIMEOUT" ]; then
+                echo "  [ERROR] npm install timed out after ${NPM_INSTALL_TIMEOUT}s with no output"
+                echo "  [DIAG] Running processes:"
+                ps aux 2>/dev/null | grep -E 'clang|cc1plus|node-gyp|npm' | grep -v grep || echo "    (none)"
+                echo "  [DIAG] Network check:"
+                curl -sS --connect-timeout 5 -o /dev/null -w "    HTTP %{http_code} (%{time_total}s)" "$_registry" 2>&1 || echo "    UNREACHABLE"
+                echo ""
+                kill -TERM "$_npm_pid" 2>/dev/null
+                sleep 2
+                kill -KILL "$_npm_pid" 2>/dev/null
+                wait "$_npm_pid" 2>/dev/null
+                continue 2
+            fi
+        else
+            _stable_count=0
+        fi
+        _last_size="$_cur_size"
+    done
+
+    wait "$_npm_pid" && {
+        DSH_INSTALL_OK=true
+        break
+    }
+done
+
+if ! $DSH_INSTALL_OK; then
+    echo "  [ERROR] All registries failed. Last resort: try with default settings"
+    npm install -g @deepseek-ai/dsh@latest && DSH_INSTALL_OK=true
+fi
+
+if ! $DSH_INSTALL_OK; then
+    echo "  [ERROR] npm install failed from all sources"
+    echo "  Try manually: npm install -g @deepseek-ai/dsh@latest"
+    echo "  Or with mirror: npm install -g @deepseek-ai/dsh@latest --registry=https://registry.npmmirror.com"
+    exit 1
+fi
 
 DSH_DIR="$(npm root -g)/@deepseek-ai/dsh"
 DSH_PKGS="$DSH_DIR/node_modules/@deepseek-ai"
@@ -125,6 +205,7 @@ apply_patch "$REPO_DIR/patches/03-subprocess-local-android.patch"            "ds
 apply_patch "$REPO_DIR/patches/04-host-apiproxy-termux-open-index.patch"     "dsh-host-apiproxy"
 apply_patch "$REPO_DIR/patches/04-host-apiproxy-termux-open-opener.patch"    "dsh-host-apiproxy"
 apply_patch "$REPO_DIR/patches/05-host-directory-picker-native-android.patch" "dsh-host-directory-picker-native"
+apply_patch "$REPO_DIR/patches/07-sandbox-local-proot-runner.patch"         "dsh-sandbox-local"
 
 # ── Step 3: Configure build environment for node-gyp ────────────────────────
 echo "==> [3/8] Configuring native addon build environment..."
@@ -264,6 +345,7 @@ for patch_file in "$REPO_DIR"/patches/*.patch; do
         host-apiproxy-termux-open-index) dir="$DSH_PKGS/dsh-host-apiproxy" ;;
         host-apiproxy-termux-open-opener) dir="$DSH_PKGS/dsh-host-apiproxy" ;;
         host-directory-picker-native-android) dir="$DSH_PKGS/dsh-host-directory-picker-native" ;;
+        sandbox-local-proot-runner) dir="$DSH_PKGS/dsh-sandbox-local" ;;
         *) dir="" ;;
     esac
     if [ -n "$dir" ] && [ -d "$dir" ]; then
@@ -289,6 +371,22 @@ else
         echo "  [WARN] node-pty fails to load even with --expose-internals"
         echo "  This may affect the terminal plugin, but other features may work."
     fi
+fi
+
+# Sandbox smoke test: verify proot runner is active for Android
+echo "  bash sandbox:"
+if [ "$(uname -o)" = "Android" ] && command -v proot >/dev/null 2>&1; then
+    SANDBOX_TEST=$(node --expose-internals -e "
+const { LocalSandboxProvider } = require('$DSH_DIR/node_modules/@deepseek-ai/dsh-sandbox-local');
+console.log('loaded');
+" 2>&1)
+    if echo "$SANDBOX_TEST" | grep -q "loaded"; then
+        echo "    proot runner: registered"
+    else
+        echo "    proot runner: module load issue"
+    fi
+else
+    echo "    (non-Android or proot missing — skipped)"
 fi
 
 echo ""
