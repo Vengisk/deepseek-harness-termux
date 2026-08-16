@@ -25,6 +25,7 @@ Termux 构建中所有插件均启用并可用:
 | 权限系统 (Permission) | ✅ 正常 | 随 `node-pty` 一并恢复 |
 | 会话持久化 | ✅ 已修复 | Android sepolicy 下 `link(2)` 回退为 `rename(2)` |
 | Bash 终端 (PTY) | ✅ 已修复 | 在 Termux 上正确解析默认 shell 路径(`/usr/bin/bash`) |
+| 移动端 UI 适配 | ✅ 自动安装 | 窄屏(<1024px)隐藏侧栏、目录变抽屉、会话全宽;宽屏无影响 |
 
 ## 系统要求
 
@@ -56,9 +57,29 @@ bash install.sh
 3. **编译 `node-pty`**:使用 Termux NDK 工具链,带 `-D__ANDROID_API__=30`(Bionic 目标)。
 4. **修补 `koffi`**:在 Android 上剔除不支持的 `statx()` 系统调用(Bionic 中不存在,回退到 POSIX `stat()`/`fstat()`)。
 5. **安装 `@img/sharp-wasm32`** 作为图像处理的可移植 WebAssembly 回退方案(无需原生编译)。
-6. **冒烟测试**:验证 `node-pty` 可以加载、默认 shell 可以解析。
+6. **安装移动端 UI 插件** [`dsh-web-mobile`](https://github.com/mexiaosqwq/dsh-web-mobile)(by @mexiaosqwq)——窄屏自动隐藏侧栏、目录变抽屉、会话全宽。
+7. **冒烟测试**:验证 `node-pty` 可以加载、默认 shell 可以解析。
 
 ## 使用方法
+
+### 移动端 UI 适配
+
+安装脚本会自动安装 [`dsh-web-mobile`](https://github.com/mexiaosqwq/dsh-web-mobile) 插件(by [@mexiaosqwq](https://github.com/mexiaosqwq))。在窄屏(<1024px)设备上:
+
+- 侧栏 rail 隐藏,目录变为 overlay 抽屉
+- 会话区独占全宽
+- 状态栏适配(不遮挡内容)
+- 设置界面改为近全宽 sheet
+
+宽屏(≥1024px)下与未安装时完全一致。
+
+![移动端会话全宽](https://raw.githubusercontent.com/mexiaosqwq/dsh-web-mobile/main/assets/hero.png)
+
+![目录抽屉](https://raw.githubusercontent.com/mexiaosqwq/dsh-web-mobile/main/assets/drawer.png)
+
+![移动端设置](https://raw.githubusercontent.com/mexiaosqwq/dsh-web-mobile/main/assets/settings.png)
+
+### 启动
 
 以全插件模式启动 Web 界面:
 
@@ -113,6 +134,7 @@ deepseek-harness-termux/
 ## 致谢
 
 - **[DeepSeek AI](https://github.com/deepseek-ai)** — 优秀的 [deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) 智能体框架。
+- **[@mexiaosqwq](https://github.com/mexiaosqwq)** — [dsh-web-mobile](https://github.com/mexiaosqwq/dsh-web-mobile) 移动端 UI 适配插件。
 - **Termux 社区** — Android 终端环境。
 - **koffi**、**node-pty**、**sharp** 的维护者。
 

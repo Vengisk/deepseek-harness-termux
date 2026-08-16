@@ -25,6 +25,7 @@ Every plugin is enabled and working in the Termux build:
 | Permission System | ✅ Working | Restored with `node-pty` |
 | Session Persistence | ✅ Fixed | `link(2)` → `rename(2)` fallback for Android sepolicy |
 | Bash Terminal (PTY) | ✅ Fixed | Default shell path resolved on Termux (`/usr/bin/bash`) |
+| Mobile UI Adaptation | ✅ Auto-installed | Narrow screens (<1024px): sidebar hidden, directory as drawer, full-width conversation; no effect on desktop |
 
 ## Prerequisites
 
@@ -56,9 +57,29 @@ The installer is idempotent — re-running it skips already-applied patches and 
 3. **Compiles `node-pty`** against the Termux NDK toolchain with `-D__ANDROID_API__=30` (Bionic target).
 4. **Patches `koffi`** to drop the unsupported `statx()` syscall on Android (it does not exist in Bionic; falls back to POSIX `stat()`/`fstat()`).
 5. **Installs `@img/sharp-wasm32`** as a portable WebAssembly fallback for image processing (no native build needed).
-6. **Runs a smoke test** to verify `node-pty` loads and the default shell resolves.
+6. **Installs the mobile UI plugin** [`dsh-web-mobile`](https://github.com/mexiaosqwq/dsh-web-mobile) (by @mexiaosqwq) — hides sidebar on narrow screens, directory becomes overlay drawer, conversation gets full width.
+7. **Runs a smoke test** to verify `node-pty` loads and the default shell resolves.
 
 ## Usage
+
+### Mobile UI Adaptation
+
+The installer automatically installs the [`dsh-web-mobile`](https://github.com/mexiaosqwq/dsh-web-mobile) plugin (by [@mexiaosqwq](https://github.com/mexiaosqwq)). On narrow screens (<1024px):
+
+- Sidebar rail hidden, directory becomes an overlay drawer
+- Conversation area takes full width
+- Status bar adapted (no content obstruction)
+- Settings panel becomes a near-full-width sheet
+
+On wide screens (≥1024px) it is identical to not having the plugin installed.
+
+![Mobile conversation full-width](https://raw.githubusercontent.com/mexiaosqwq/dsh-web-mobile/main/assets/hero.png)
+
+![Directory drawer](https://raw.githubusercontent.com/mexiaosqwq/dsh-web-mobile/main/assets/drawer.png)
+
+![Mobile settings](https://raw.githubusercontent.com/mexiaosqwq/dsh-web-mobile/main/assets/settings.png)
+
+### Start
 
 Start the web interface with all plugins enabled:
 
@@ -113,6 +134,7 @@ deepseek-harness-termux/
 ## Acknowledgements
 
 - **[DeepSeek AI](https://github.com/deepseek-ai)** for the excellent [deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) agent framework.
+- **[@mexiaosqwq](https://github.com/mexiaosqwq)** for the [dsh-web-mobile](https://github.com/mexiaosqwq/dsh-web-mobile) mobile UI plugin.
 - **Termux Community** for the Android terminal environment.
 - **koffi**, **node-pty**, and **sharp** maintainers.
 

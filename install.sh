@@ -23,7 +23,7 @@ cmd_exists() {
 }
 
 # ── Step 0: Install system dependencies ─────────────────────────────────────
-echo "==> [0/8] Checking & installing system dependencies..."
+echo "==> [0/9] Checking & installing system dependencies..."
 
 # Packages to install via pkg (both metapackages and individual tools)
 SYSTEM_PKGS=(
@@ -76,7 +76,7 @@ if $TOOLS_MISSING; then
 fi
 
 # ── Step 1: Install @deepseek-ai/dsh ────────────────────────────────────────
-echo "==> [1/8] Installing @deepseek-ai/dsh globally..."
+echo "==> [1/9] Installing @deepseek-ai/dsh globally..."
 
 # node-pty's install lifecycle runs `node scripts/prebuild.js || node-gyp rebuild`
 # with NO CLI arguments. On Android, gyp detects OS=android and node's stock
@@ -198,7 +198,7 @@ apply_patch() {
 }
 
 # ── Step 2: Apply Android patches ────────────────────────────────────────────
-echo "==> [2/8] Applying Android platform patches..."
+echo "==> [2/9] Applying Android platform patches..."
 apply_patch "$REPO_DIR/patches/01-terminal-bash-android-shell.patch"        "dsh-terminal-bash"
 apply_patch "$REPO_DIR/patches/02-session-persistence-link-rename.patch"     "dsh-session-persistence-jsonl"
 apply_patch "$REPO_DIR/patches/03-subprocess-local-android.patch"            "dsh-subprocess-local"
@@ -208,7 +208,7 @@ apply_patch "$REPO_DIR/patches/05-host-directory-picker-native-android.patch" "d
 apply_patch "$REPO_DIR/patches/07-sandbox-local-proot-runner.patch"         "dsh-sandbox-local"
 
 # ── Step 3: Configure build environment for node-gyp ────────────────────────
-echo "==> [3/8] Configuring native addon build environment..."
+echo "==> [3/9] Configuring native addon build environment..."
 
 # Belt-and-suspenders: patch node's cached common.gypi to give
 # android_ndk_path a default empty value. node's stock common.gypi has an
@@ -267,7 +267,7 @@ echo "  [OK] CC = $(command -v "$CC" 2>/dev/null || echo "$CC (not on PATH yet)"
 echo "  [OK] CXX = $(command -v "$CXX" 2>/dev/null || echo "$CXX (not on PATH yet)")"
 
 # ── Step 4: Build node-pty ──────────────────────────────────────────────────
-echo "==> [4/8] Compiling node-pty (Android API 30)..."
+echo "==> [4/9] Compiling node-pty (Android API 30)..."
 PTY_DIR="$DSH_DIR/node_modules/node-pty"
 if [ -f "$PTY_DIR/build/Release/pty.node" ]; then
     echo "  [SKIP] pty.node already built."
@@ -307,7 +307,7 @@ else
 fi
 
 # ── Step 5: Patch koffi statx() for Android ──────────────────────────────────
-echo "==> [5/8] Patching koffi statx() syscall for Android..."
+echo "==> [5/9] Patching koffi statx() syscall for Android..."
 KOFFI_CC="$DSH_DIR/node_modules/koffi/lib/native/base/base.cc"
 if grep -q "defined(__linux__) && !defined(__ANDROID__)" "$KOFFI_CC" 2>/dev/null; then
     echo "  [SKIP] Patch already applied."
@@ -317,7 +317,7 @@ else
 fi
 
 # ── Step 6: Install sharp WebAssembly fallback ───────────────────────────────
-echo "==> [6/8] Installing sharp WebAssembly fallback..."
+echo "==> [6/9] Installing sharp WebAssembly fallback..."
 cd "$DSH_DIR"
 if npm install @img/sharp-wasm32 > /dev/null 2>&1; then
     echo "  [OK] @img/sharp-wasm32 installed."
@@ -325,8 +325,57 @@ else
     echo "  [WARN] Could not install @img/sharp-wasm32 (may already be present)."
 fi
 
-# ── Step 7: Verify environment ───────────────────────────────────────────────
-echo "==> [7/8] Verifying environment..."
+# ── Step 7: Install mobile-adaptive UI plugin ────────────────────────────────
+echo "==> [7/9] Installing dsh-web-mobile (mobile-adaptive UI plugin)..."
+# dsh-web-mobile by @mexiaosqwq: on narrow screens (<1024px) hides the sidebar
+# rail and turns the directory into an overlay drawer, giving the conversation
+# full width. Pure client plugin — no effect on desktop (≥1024px).
+# https://github.com/mexiaosqwq/dsh-web-mobile
+
+DSH_HOME_DIR="${DSSH_HOME:-$HOME/.dsh}"
+WEB_PROFILE_DIR="$DSH_HOME_DIR/profiles/web"
+
+if [ ! -d "$WEB_PROFILE_DIR" ]; then
+    echo "  [WARN] Web profile directory not found at $WEB_PROFILE_DIR"
+    echo "  [INFO] Run 'dsh web' once to generate the profile, then re-run install.sh"
+else
+    # Check if already installed
+    if grep -q "dsh-mobile-nav" "$WEB_PROFILE_DIR/package.json" 2>/dev/null; then
+        echo "  [SKIP] dsh-web-mobile already installed"
+    else
+        echo "  -> Installing via dsh plugin command..."
+        if node --expose-internals "$DSH_DIR/lib/bin.js" --profile web plugin add github:mexiaosqwq/dsh-web-mobile 2>&1; then
+            echo "  [OK] dsh-web-mobile installed"
+        else
+            echo "  [WARN] dsh plugin command failed, trying manual install..."
+            # Manual fallback: add to package.json and install via pnpm
+            cd "$WEB_PROFILE_DIR"
+            # Add dependency to package.json
+            node -e "
+                const fs = require('fs');
+                const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+                pkg.dependencies = pkg.dependencies || {};
+                pkg.dependencies['@dsh-external/dsh-mobile-nav'] = 'github:mexiaosqwq/dsh-web-mobile';
+                pkg.dsh = pkg.dsh || {};
+                pkg.dsh.profile = pkg.dsh.profile || {};
+                pkg.dsh.profile.bundles = pkg.dsh.profile.bundles || [];
+                if (!pkg.dsh.profile.bundles.includes('@dsh-external/dsh-mobile-nav')) {
+                    pkg.dsh.profile.bundles.push('@dsh-external/dsh-mobile-nav');
+                }
+                fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+            " 2>&1
+            if pnpm install 2>&1; then
+                echo "  [OK] dsh-web-mobile installed (manual)"
+            else
+                echo "  [WARN] Manual install also failed; you can install it later:"
+                echo "    dsh --profile web plugin add github:mexiaosqwq/dsh-web-mobile"
+            fi
+        fi
+    fi
+fi
+
+# ── Step 8: Verify environment ───────────────────────────────────────────────
+echo "==> [8/9] Verifying environment..."
 NODE_VER=$(node -v 2>/dev/null || echo "not found")
 echo "  Node.js: $NODE_VER"
 echo "  dsh dir: $DSH_DIR"
@@ -360,7 +409,7 @@ for patch_file in "$REPO_DIR"/patches/*.patch; do
 done
 
 # ── Step 8: Runtime smoke test ───────────────────────────────────────────────
-echo "==> [8/8] Runtime smoke test..."
+echo "==> [9/9] Runtime smoke test..."
 if node -e "require('node-pty'); process.exit(0)" 2>/dev/null; then
     echo "  node-pty: OK"
 else
