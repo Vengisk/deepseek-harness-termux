@@ -399,16 +399,16 @@ for patch_file in "$REPO_DIR"/patches/*.patch; do
     esac
     if [ -n "$dir" ] && [ -d "$dir" ]; then
         if (cd "$dir" && patch -p1 --dry-run --reverse < "$patch_file" > /dev/null 2>&1); then
-            echo "    [NOT APPLIED] $name"
-        else
             echo "    [APPLIED] $name"
+        else
+            echo "    [NOT APPLIED] $name"
         fi
     else
         echo "    [SKIP] $name (package not found)"
     fi
 done
 
-# ── Step 8: Runtime smoke test ───────────────────────────────────────────────
+# ── Step 9: Runtime smoke test ───────────────────────────────────────────────
 echo "==> [9/9] Runtime smoke test..."
 if node -e "require('node-pty'); process.exit(0)" 2>/dev/null; then
     echo "  node-pty: OK"
