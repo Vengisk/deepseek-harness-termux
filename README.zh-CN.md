@@ -33,8 +33,12 @@ Termux 构建中所有插件均启用并可用:
 - **Termux** — 请从 [F-Droid](https://f-droid.org/en/packages/com.termux/) 安装(Play Store 版本不受支持且已过时)
 - **Node.js >= 24**、**npm**、以及原生模块构建工具链:
   ```bash
-  pkg update && pkg install nodejs-lts binutils make pkg-config clang python
+  pkg update -y && pkg upgrade -y
+  pkg install -y nodejs-lts binutils make pkg-config clang python cmake patch git proot which ndk-multilib libandroid-spawn
   ```
+  (`ndk-multilib` 提供多 ABI NDK 工具链,`libandroid-spawn` 提供 `posix_spawn()`
+  兼容层——两者对低版本 Android 设备很有帮助。`install.sh` 会自动安装这些,
+  所以直接运行安装脚本时也可跳过本手动步骤。)
 - **网络连接** — 用于下载依赖包
 
 ## 安装

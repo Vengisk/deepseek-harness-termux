@@ -60,6 +60,18 @@ apply_patch() {
 # ── Step 0: Install system dependencies ─────────────────────────────────────
 echo "==> [0/9] Checking & installing system dependencies..."
 
+# Refresh package lists first. Stale lists are a common cause of "package not
+# found" / broken dependency resolution on older setups; if the refresh fails
+# we still continue with whatever lists exist (offline-friendly).
+echo "  -> Refreshing package lists (pkg update)..."
+if pkg update -y; then
+    echo "  [OK] package lists refreshed."
+else
+    echo "  [WARN] pkg update failed — continuing with existing lists"
+fi
+
+# Core packages required by the installer and the native builds. If any of
+# these fails, install.sh aborts below with a clear message.
 SYSTEM_PKGS=(
     ndk-sysroot    # Android platform headers/libs (bionic sysroot: stdio.h etc.)
     clang          # C/C++ compiler (LLVM/Clang for Termux)
@@ -69,11 +81,12 @@ SYSTEM_PKGS=(
     python3        # node-gyp/gyp configure scripts
     pkg-config     # Library discovery
     patch          # Apply source patches
-    git            # Version check / metadata
+    git            # Version check / metadata / git-hosted plugins
     proot          # User-space chroot for bash sandbox (Android fallback)
     nodejs         # Node.js runtime
     npm            # Package manager
     curl           # Header tarball downloads
+    which          # command -v fallback / diagnostics
 )
 
 PKGS_TO_INSTALL=()
@@ -88,13 +101,40 @@ done
 
 if [ ${#PKGS_TO_INSTALL[@]} -gt 0 ]; then
     echo "  -> Installing: ${PKGS_TO_INSTALL[*]}"
-    pkg install -y "${PKGS_TO_INSTALL[@]}"
+    if ! pkg install -y "${PKGS_TO_INSTALL[@]}"; then
+        echo ""
+        echo "  [ERROR] pkg install failed. Common fixes:"
+        echo "  - Run 'pkg upgrade -y' once (stale/broken packages block installs)"
+        echo "  - Run 'pkg install -y ${PKGS_TO_INSTALL[*]}' manually to see the real error"
+        echo "  - Check your network / Termux mirrors (termux-change-repo)"
+        exit 1
+    fi
     echo "  [OK] System dependencies installed."
 else
     echo "  [OK] All system dependencies satisfied."
 fi
 
-TOOLS=(clang clang++ ar cmake make pkg-config patch git python3 node npm curl)
+# Optional-but-recommended packages: not present in every Termux repo, so a
+# failure here is non-fatal.
+#   ndk-multilib:    multi-ABI NDK toolchain at $PREFIX/opt/ndk-multilib.
+#                    Provides the sysroot/headers/libs some devices need for
+#                    native compilation (verified on low-Android setups).
+#   libandroid-spawn: posix_spawn() shim for old Android bionic; lets builds
+#                    link with -landroid-spawn when present.
+if ! pkg_installed ndk-multilib; then
+    echo "  -> Installing ndk-multilib (multi-ABI NDK toolchain)..."
+    pkg install -y ndk-multilib > /dev/null 2>&1 \
+        && echo "  [OK] ndk-multilib installed" \
+        || echo "  [WARN] ndk-multilib unavailable — continuing without it"
+fi
+if ! pkg_installed libandroid-spawn; then
+    echo "  -> Installing libandroid-spawn (posix_spawn shim)..."
+    pkg install -y libandroid-spawn > /dev/null 2>&1 \
+        && echo "  [OK] libandroid-spawn installed" \
+        || echo "  [WARN] libandroid-spawn unavailable — continuing without it"
+fi
+
+TOOLS=(clang clang++ ar cmake make pkg-config patch git python3 node npm curl which)
 TOOLS_MISSING=false
 for tool in "${TOOLS[@]}"; do
     if cmd_exists "$tool"; then
@@ -115,27 +155,52 @@ echo "==> [1/9] Configuring native addon build environment..."
 # node-pty/koffi build via gyp: on Termux, gyp sees OS=android (python3 reports
 # sys.platform='android') and node's stock common.gypi has an android branch
 # that references <(android_ndk_path) with NO default value ->
-# "gyp: Undefined variable android_ndk_path". Termux has no standalone NDK
-# metadata; the Bionic sysroot comes from the ndk-sysroot package. We therefore
-# pin android_ndk_path to empty via BOTH channels:
-#   1. GYP_DEFINES env var (gyp's official -D channel, read via ShlexEnv) —
-#      inherited by every node-gyp/gyp child.
-#   2. A default value patched into node's cached common.gypi (Step 2) —
-#      covers manual rebuilds where GYP_DEFINES may be unset.
-export GYP_DEFINES="${GYP_DEFINES:+$GYP_DEFINES }android_ndk_path="
+# "gyp: Undefined variable android_ndk_path". Termux has no standalone Google
+# NDK metadata; the Bionic sysroot comes from the ndk-sysroot package. We
+# therefore always pin android_ndk_path via GYP_DEFINES (gyp's official -D
+# channel, read via ShlexEnv — inherited by every node-gyp/gyp child):
+#   - when ndk-multilib is installed we point it at
+#     $PREFIX/opt/ndk-multilib (community-tested on low-Android devices),
+#   - otherwise we pin it to empty, which is equally fine (the referenced
+#     -I<path>/sources/... directory does not exist either way).
+# A default value is ALSO patched into node's cached common.gypi (Step 2) to
+# cover manual rebuilds where GYP_DEFINES may be unset.
+NDK_MULTILIB="${PREFIX:-/data/data/com.termux/files/usr}/opt/ndk-multilib"
+if [ -d "$NDK_MULTILIB" ]; then
+    export ANDROID_NDK_HOME="$NDK_MULTILIB"
+    export ANDROID_NDK_ROOT="$NDK_MULTILIB"
+    export GYP_DEFINES="${GYP_DEFINES:+$GYP_DEFINES }android_ndk_path=$NDK_MULTILIB"
+    echo "  [OK] ndk-multilib NDK detected: $NDK_MULTILIB"
+    echo "  [OK] ANDROID_NDK_HOME/ROOT + android_ndk_path -> $NDK_MULTILIB"
+else
+    # A stale/foreign NDK env var would make gyp/node-gyp attempt cross-
+    # compilation — unset when we have no NDK to point them at.
+    unset ANDROID_NDK_HOME
+    unset ANDROID_NDK_ROOT
+    export GYP_DEFINES="${GYP_DEFINES:+$GYP_DEFINES }android_ndk_path="
+fi
 echo "  [OK] GYP_DEFINES='$GYP_DEFINES'"
 
-# Termux clang finds the bionic headers on its own, but a stale/foreign NDK
-# env var would make gyp/node-gyp attempt cross-compilation. Unset them.
-unset ANDROID_NDK_HOME
-unset ANDROID_NDK_ROOT
+# NOTE: do NOT export -D defines in CFLAGS/CXXFLAGS here. A global
+# "-D__ANDROID_API__=30" (or any -D) leaks into cmake-based builds (koffi) via
+# the CFLAGS env var and breaks them: Termux's bionic/libc++ headers use clang
+# availability checks against the target (android24), so strtof_l()/
+# pthread_cond_clockwait() etc. error out. Termux clang's default target
+# already works for node-pty and koffi, and the native builds below scrub
+# CFLAGS/CXXFLAGS/CPPFLAGS from their own environment.
+#
+# We DO export LDFLAGS=-landroid-spawn when libandroid-spawn is installed:
+# that shim provides posix_spawn() on old Android bionic and is consumed by
+# cmake (koffi) during linking. Harmless when the library is absent — we only
+# set it when the .so exists.
+if [ -f "${PREFIX:-/data/data/com.termux/files/usr}/lib/libandroid-spawn.so" ]; then
+    export LDFLAGS="${LDFLAGS:+$LDFLAGS }-landroid-spawn"
+    echo "  [OK] LDFLAGS='$LDFLAGS' (libandroid-spawn)"
+fi
 
-# NOTE: do NOT export CFLAGS/CXXFLAGS here. A global "-D__ANDROID_API__=30"
-# (or any -D) leaks into cmake-based builds (koffi) via the CFLAGS env var and
-# breaks them: Termux's bionic/libc++ headers use clang availability checks
-# against the target (android24), so strtof_l()/pthread_cond_clockwait() etc.
-# error out. Termux clang's default target already works for node-pty and
-# koffi, and the native builds below scrub CFLAGS from their own environment.
+# node-gyp python discovery: export a deterministic interpreter.
+export PYTHON="${PYTHON:-$(command -v python3 || command -v python || echo python3)}"
+echo "  [OK] PYTHON=$PYTHON"
 
 export CC="${CC:-clang}"
 export CXX="${CXX:-clang++}"
@@ -430,15 +495,25 @@ echo "  Node.js: $NODE_VER_CUR"
 echo "  dsh dir: $DSH_DIR"
 
 echo "  Native modules:"
+_NATIVE_MISSING=false
 if [ -f "$PTY_DIR/build/Release/pty.node" ]; then
     echo "    [OK] node-pty pty.node"
 else
     echo "    [MISS] node-pty pty.node"
+    _NATIVE_MISSING=true
 fi
 if [ -f "$KOFFI_OUT" ]; then
     echo "    [OK] koffi android_arm64 koffi.node"
 else
     echo "    [MISS] koffi android_arm64 koffi.node"
+    _NATIVE_MISSING=true
+fi
+if $_NATIVE_MISSING; then
+    echo ""
+    echo "  [ERROR] Native modules are missing — the install is incomplete."
+    echo "  Re-run install.sh; if it persists, capture the output above and"
+    echo "  open an issue at https://github.com/Vengisk/deepseek-harness-termux"
+    exit 1
 fi
 
 echo "  Patches:"
@@ -513,5 +588,21 @@ echo "To start dsh web (all plugins enabled), run:"
 echo ""
 echo "  node --expose-internals $(npm root -g)/@deepseek-ai/dsh/lib/bin.js web"
 echo ""
-echo "Or add an alias to your ~/.bashrc:"
-echo "  alias dsh='node --expose-internals \$(npm root -g)/@deepseek-ai/dsh/lib/bin.js'"
+
+# Add a convenient dsh alias WITHOUT overwriting the user's own ~/.bashrc:
+# append only if it is not already present.
+_DSH_ALIAS="alias dsh='node --expose-internals \$(npm root -g)/@deepseek-ai/dsh/lib/bin.js'"
+if [ -f "$HOME/.bashrc" ] && ! grep -q "alias dsh=" "$HOME/.bashrc" 2>/dev/null; then
+    echo "$_DSH_ALIAS" >> "$HOME/.bashrc"
+    echo "  [OK] Appended to $HOME/.bashrc:"
+    echo "    $_DSH_ALIAS"
+    echo "  [INFO] Run 'source ~/.bashrc' once (or open a new session) to activate,"
+    echo "  [INFO] then you can just type: dsh web"
+elif [ -f "$HOME/.bashrc" ]; then
+    echo "  [SKIP] dsh alias already present in $HOME/.bashrc"
+else
+    echo "  [INFO] No ~/.bashrc found — add this alias yourself to use 'dsh':"
+    echo "    $_DSH_ALIAS"
+fi
+echo ""
+echo "  (Your existing ~/.bashrc was never overwritten.)"

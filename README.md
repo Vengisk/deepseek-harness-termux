@@ -33,8 +33,13 @@ Every plugin is enabled and working in the Termux build:
 - **Termux** from [F-Droid](https://f-droid.org/en/packages/com.termux/) (the Play Store version is unsupported and outdated)
 - **Node.js >= 24**, **npm**, and the build toolchain for native modules:
   ```bash
-  pkg update && pkg install nodejs-lts binutils make pkg-config clang python
+  pkg update -y && pkg upgrade -y
+  pkg install -y nodejs-lts binutils make pkg-config clang python cmake patch git proot which ndk-multilib libandroid-spawn
   ```
+  (`ndk-multilib` adds the multi-ABI NDK toolchain and `libandroid-spawn` the
+  `posix_spawn()` shim — both help on older Android versions. `install.sh`
+  installs everything automatically, so if you only run the installer you can
+  skip this manual step.)
 - **Internet connection** for downloading packages
 
 ## Installation
