@@ -76,6 +76,29 @@ The installer automatically installs the [`dsh-web-mobile`](https://github.com/m
 - Status bar adapted (no content obstruction)
 - Settings panel becomes a near-full-width sheet
 
+
+## Preview
+
+| Session Home (Full Width) | Directory Drawer | Settings Interface |
+| --- | --- | --- |
+| ![Mobile session home](https://raw.githubusercontent.com/mexiaosqwq/dsh-web-mobile/main/assets/hero.png) | ![Directory drawer](https://raw.githubusercontent.com/mexiaosqwq/dsh-web-mobile/main/assets/drawer.png) | ![Mobile settings interface](https://raw.githubusercontent.com/mexiaosqwq/dsh-web-mobile/main/assets/settings.png) |
+
+### Start
+
+Start the web interface with all plugins enabled:
+
+```bash
+node --expose-internals $(npm root -g)/@deepseek-ai/dsh/lib/bin.js web
+```
+
+Or add an alias to your `~/.bashrc`:
+
+```bash
+alias dsh='node --expose-internals $(npm root -g)/@deepseek-ai/dsh/lib/bin.js'
+```
+
+The `--expose-internals` flag is required because `cordis-plugin-hmr` accesses Node.js internal modules (e.g. `node:internal/modules`), which are gated by default since Node.js 22.
+
 ### Web Search
 
 Two ways to enable web search in the web UI:
@@ -107,28 +130,6 @@ Two ways to enable web search in the web UI:
    returns **404**. Leave its `baseURL` at the default
    `https://api.deepseek.com/anthropic/v1` and use a key valid for the
    endpoint you point it at.
-
-## Preview
-
-| Session Home (Full Width) | Directory Drawer | Settings Interface |
-| --- | --- | --- |
-| ![Mobile session home](https://raw.githubusercontent.com/mexiaosqwq/dsh-web-mobile/main/assets/hero.png) | ![Directory drawer](https://raw.githubusercontent.com/mexiaosqwq/dsh-web-mobile/main/assets/drawer.png) | ![Mobile settings interface](https://raw.githubusercontent.com/mexiaosqwq/dsh-web-mobile/main/assets/settings.png) |
-
-### Start
-
-Start the web interface with all plugins enabled:
-
-```bash
-node --expose-internals $(npm root -g)/@deepseek-ai/dsh/lib/bin.js web
-```
-
-Or add an alias to your `~/.bashrc`:
-
-```bash
-alias dsh='node --expose-internals $(npm root -g)/@deepseek-ai/dsh/lib/bin.js'
-```
-
-The `--expose-internals` flag is required because `cordis-plugin-hmr` accesses Node.js internal modules (e.g. `node:internal/modules`), which are gated by default since Node.js 22.
 
 ## Patches
 
