@@ -123,6 +123,21 @@ Two ways to enable web search in the web UI:
 
    Restart `dsh web` once after installing the plugin.
 
+> [!WARNING]
+> Known issue (verified on dsh `0.1.0-rc.6`): installing `dsh-web-search-pro@0.1.2`
+> together with `@anweat/dsh-browser` broke the shared tool-dispatch layer —
+> every tool call (including the GUI's own tools) failed with
+> `Cannot read properties of undefined (reading 'prepare')`
+> (`scheduler.prepare` in `dsh-tools` where
+> `registry[TOOL_RUNTIME_SCHEDULER]` is undefined). Root cause points at the
+> plugin's separate in-profile copy of `@deepseek-ai/dsh-tools` shadowing the
+> host registry (a `Symbol`-keyed scheduler lookup). Recovery: remove the
+> plugin and restart:
+> `dsh plugin --profile web remove dsh-web-search-pro`
+> If the author publishes a fixed version, retry — and test on a spare port
+> (`dsh web --port 3191`) before replacing your live instance.
+
+
 2. **Built-in `web-search-deepseek`** — speaks DeepSeek's *Anthropic-compatible*
    Messages API (`baseURL` + `/messages`) with the native `web_search_20250305`
    tool. ⚠️ It is **not** an Exa client: pointing its `baseURL` at

@@ -122,6 +122,17 @@ Web UI 里有两种开启网页搜索的方式:
 
    装完插件后重启一次 `dsh web`。
 
+> [!WARNING]
+> 已知问题(在 dsh `0.1.0-rc.6` 实测):安装 `dsh-web-search-pro@0.1.2` 及
+> `@anweat/dsh-browser` 后,共享工具分发层被破坏——所有工具调用(含 GUI 自带工具)
+> 都会报 `Cannot read properties of undefined (reading 'prepare')`
+> (即 `dsh-tools` 里 `scheduler.prepare` 处 `registry[TOOL_RUNTIME_SCHEDULER]`
+> 为 undefined)。根因指向插件在 profile 里装的独立 `@deepseek-ai/dsh-tools`
+> 副本遮蔽了宿主注册表(Symbol 键调度器查询)。恢复方法:卸载插件并重启:
+> `dsh plugin --profile web remove dsh-web-search-pro`
+> 若作者发布修复版,可在空闲端口(`dsh web --port 3191`)先测试再替换线上实例。
+
+
 2. **内置 `web-search-deepseek`** — 只讲 DeepSeek 的 *Anthropic 兼容* Messages API(`baseURL` + `/messages`,原生 `web_search_20250305` 工具)。⚠️ 它**不是** Exa 客户端:把 `baseURL` 指向 `https://api.exa.ai/search` 会去请求 `.../search/messages`,必然 **404**。保持默认 `https://api.deepseek.com/anthropic/v1`,并使用在该端点有效的 key。
 
 ## 源码补丁
