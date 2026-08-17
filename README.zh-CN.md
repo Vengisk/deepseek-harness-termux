@@ -71,13 +71,11 @@ bash install.sh
 - 状态栏适配(不遮挡内容)
 - 设置界面改为近全宽 sheet
 
-宽屏(≥1024px)下与未安装时完全一致。
+## 效果
 
-![移动端会话全宽](https://raw.githubusercontent.com/mexiaosqwq/dsh-web-mobile/main/assets/hero.png)
-
-![目录抽屉](https://raw.githubusercontent.com/mexiaosqwq/dsh-web-mobile/main/assets/drawer.png)
-
-![移动端设置](https://raw.githubusercontent.com/mexiaosqwq/dsh-web-mobile/main/assets/settings.png)
+| 会话主页(全宽) | 目录抽屉 | 设置界面 |
+| --- | --- | --- |
+| ![移动端会话主页](assets/hero.png) | ![目录抽屉](assets/drawer.png) | ![移动端设置界面](assets/settings.png) |
 
 ### 启动
 
