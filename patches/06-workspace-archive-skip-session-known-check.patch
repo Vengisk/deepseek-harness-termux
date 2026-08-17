@@ -1,6 +1,6 @@
 --- a/lib/index.js
 +++ b/lib/index.js
-@@ -423,7 +423,11 @@
+@@ -423,6 +423,12 @@
  		return this.enqueueOperation(async () => {
  			if (this.requireState().archivedSessionIds.includes(sessionId)) return;
 -			if (!await this.sessionKnown(sessionId)) throw new WorkspaceUnknownSessionError(sessionId);
