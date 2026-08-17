@@ -77,6 +77,7 @@ bash install.sh
 | --- | --- | --- |
 | ![移动端会话主页](assets/hero.png) | ![目录抽屉](assets/drawer.png) | ![移动端设置界面](assets/settings.png) |
 
+
 ### 启动
 
 以全插件模式启动 Web 界面:
