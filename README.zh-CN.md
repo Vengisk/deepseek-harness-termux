@@ -47,26 +47,7 @@ Termux 构建中所有插件均启用并可用:
 
 ### 方案一 — 本机编译(install.sh)
 
-完全可控,适用于任意 arm64 Termux;需一次性编译 `node-pty`/`koffi`(需要 clang + cmake + NDK sysroot,约 10–20 分钟):
-
-```bash
-git clone https://github.com/Vengisk/deepseek-harness-termux.git
-cd deepseek-harness-termux
-bash install.sh
-```
-
-### 方案二 — 预编译原生模块(推荐,安装快)
-
-完全不需要编译:`node-pty` 和 `koffi` 已为 android-arm64 预编译(N-API,跨 Node 版本 ABI 稳定),postinstall 自动打补丁并放置原生模块:
-
-```bash
-npm i -g https://github.com/Vengisk/deepseek-harness-termux/releases/latest/download/dsh-termux.tgz
-dsh web
-```
-
-详见 [`prebuilt/README.md`](prebuilt/README.md)。维护者用
-[`scripts/build-prebuilt.sh`](scripts/build-prebuilt.sh) 重建 tarball。
-## 安装
+完全可控,适用于任意 arm64 Termux;需一次性编译 `node-pty`/`koffi`(需要 clang + cmake + NDK sysroot,约 5–10 分钟):
 
 ```bash
 # 克隆本仓库
@@ -88,6 +69,18 @@ bash install.sh
 5. **安装 `@img/sharp-wasm32`** 作为图像处理的可移植 WebAssembly 回退方案(无需原生编译)。
 6. **安装移动端 UI 插件** [`dsh-web-mobile`](https://github.com/mexiaosqwq/dsh-web-mobile)(by @mexiaosqwq)——窄屏自动隐藏侧栏、目录变抽屉、会话全宽。
 7. **冒烟测试**:验证 `node-pty` 可以加载、默认 shell 可以解析。
+
+### 方案二 — 预编译原生模块(推荐,安装快)
+
+完全不需要编译:`node-pty` 和 `koffi` 已为 android-arm64 预编译(N-API,跨 Node 版本 ABI 稳定),postinstall 自动打补丁并放置原生模块:
+
+```bash
+npm i -g https://github.com/Vengisk/deepseek-harness-termux/releases/latest/download/dsh-termux.tgz
+dsh web
+```
+
+详见 [`prebuilt/README.md`](prebuilt/README.md)。维护者用
+[`scripts/build-prebuilt.sh`](scripts/build-prebuilt.sh) 重建 tarball。
 
 ## 使用方法
 
