@@ -76,13 +76,11 @@ The installer automatically installs the [`dsh-web-mobile`](https://github.com/m
 - Status bar adapted (no content obstruction)
 - Settings panel becomes a near-full-width sheet
 
-On wide screens (≥1024px) it is identical to not having the plugin installed.
+## Preview
 
-![Mobile conversation full-width](https://raw.githubusercontent.com/mexiaosqwq/dsh-web-mobile/main/assets/hero.png)
-
-![Directory drawer](https://raw.githubusercontent.com/mexiaosqwq/dsh-web-mobile/main/assets/drawer.png)
-
-![Mobile settings](https://raw.githubusercontent.com/mexiaosqwq/dsh-web-mobile/main/assets/settings.png)
+| Session Home (Full Width) | Directory Drawer | Settings Interface |
+| --- | --- | --- |
+| ![Mobile session home](https://raw.githubusercontent.com/mexiaosqwq/dsh-web-mobile/main/assets/hero.png) | ![Directory drawer](https://raw.githubusercontent.com/mexiaosqwq/dsh-web-mobile/main/assets/drawer.png) | ![Mobile settings interface](https://raw.githubusercontent.com/mexiaosqwq/dsh-web-mobile/main/assets/settings.png) |
 
 ### Start
 
