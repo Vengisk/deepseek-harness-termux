@@ -20,7 +20,7 @@ Termux 构建中所有插件均启用并可用:
 | `dsh headless` | ✅ 正常 | 单会话无头模式 |
 | `dsh plugin` | ✅ 正常 | 插件管理 |
 | HMR(热重载) | ✅ 正常 | 以 `--expose-internals` 启动 |
-| 子进程 (Subprocess) | ✅ 正常 | `node-pty` 已针对 Android NDK(API 30)编译 |
+| 子进程 (Subprocess) | ✅ 正常 | `node-pty` 已针对 Termux bionic 环境编译 |
 | Bash 沙箱 | ⚠️ 有限 | `node-pty` 正常;`bubblewrap` 在运行时被 Android sepolicy 拦截,安全降级为 `SandboxUnavailableError`,不崩溃 |
 | 权限系统 (Permission) | ✅ 正常 | 随 `node-pty` 一并恢复 |
 | 会话持久化 | ✅ 已修复 | Android sepolicy 下 `link(2)` 回退为 `rename(2)` |
@@ -54,7 +54,7 @@ bash install.sh
 
 1. **全局安装** `@deepseek-ai/dsh`。
 2. **应用 [`patches/`](patches/) 下的 Android 源码补丁**到已安装的各个包。
-3. **编译 `node-pty`**:使用 Termux NDK 工具链,带 `-D__ANDROID_API__=30`(Bionic 目标)。
+3. **编译原生模块** (`koffi`、`node-pty`):基于 Termux bionic 环境编译——编译**之前**先准备好构建环境(node 头文件、`GYP_DEFINES`、`common.gypi` 修复)并应用源码补丁。
 4. **修补 `koffi`**:在 Android 上剔除不支持的 `statx()` 系统调用(Bionic 中不存在,回退到 POSIX `stat()`/`fstat()`)。
 5. **安装 `@img/sharp-wasm32`** 作为图像处理的可移植 WebAssembly 回退方案(无需原生编译)。
 6. **安装移动端 UI 插件** [`dsh-web-mobile`](https://github.com/mexiaosqwq/dsh-web-mobile)(by @mexiaosqwq)——窄屏自动隐藏侧栏、目录变抽屉、会话全宽。

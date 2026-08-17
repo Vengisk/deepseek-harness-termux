@@ -20,7 +20,7 @@ Every plugin is enabled and working in the Termux build:
 | `dsh headless` | ✅ Working | Single-session headless mode |
 | `dsh plugin` | ✅ Working | Plugin management |
 | HMR (Hot Reload) | ✅ Working | Launched with `--expose-internals` |
-| Subprocess | ✅ Working | `node-pty` compiled against Android NDK (API 30) |
+| Subprocess | ✅ Working | `node-pty` compiled against the Termux bionic sysroot |
 | Bash Sandbox | ⚠️ Limited | `node-pty` works; `bubblewrap` is blocked by Android sepolicy at runtime and degrades safely (`SandboxUnavailableError`) |
 | Permission System | ✅ Working | Restored with `node-pty` |
 | Session Persistence | ✅ Fixed | `link(2)` → `rename(2)` fallback for Android sepolicy |
@@ -54,7 +54,7 @@ The installer is idempotent — re-running it skips already-applied patches and 
 
 1. **Installs** `@deepseek-ai/dsh` globally.
 2. **Applies the Android source patches** under [`patches/`](patches/) to the installed packages.
-3. **Compiles `node-pty`** against the Termux NDK toolchain with `-D__ANDROID_API__=30` (Bionic target).
+3. **Builds the native addons** (`koffi`, `node-pty`) against the Termux bionic sysroot — the build environment (node headers, `GYP_DEFINES`, the `common.gypi` fix) is prepared and the source patches are applied **before** anything compiles.
 4. **Patches `koffi`** to drop the unsupported `statx()` syscall on Android (it does not exist in Bionic; falls back to POSIX `stat()`/`fstat()`).
 5. **Installs `@img/sharp-wasm32`** as a portable WebAssembly fallback for image processing (no native build needed).
 6. **Installs the mobile UI plugin** [`dsh-web-mobile`](https://github.com/mexiaosqwq/dsh-web-mobile) (by @mexiaosqwq) — hides sidebar on narrow screens, directory becomes overlay drawer, conversation gets full width.
