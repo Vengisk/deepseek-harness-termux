@@ -72,22 +72,24 @@ The installer is idempotent — re-running it skips already-applied patches and 
 6. **Installs the mobile UI plugin** [`dsh-web-mobile`](https://github.com/mexiaosqwq/dsh-web-mobile) (by @mexiaosqwq) — hides sidebar on narrow screens, directory becomes overlay drawer, conversation gets full width.
 7. **Runs a smoke test** to verify `node-pty` loads and the default shell resolves.
 
-### Plan B — precompiled native modules (recommended for speed)
+### Plan B — precompiled native modules (recommended, no compilation)
 
 No compilation at all: `node-pty` and `koffi` ship prebuilt for android-arm64
-(N-API, ABI-stable), and the postinstall patches the sources and wires the
-natives automatically:
+(N-API, ABI-stable), and the sources are already patched, so the install is a
+plain download + extract:
 
 ```bash
-npm i -g https://github.com/Vengisk/deepseek-harness-termux/releases/latest/download/dsh-termux.tgz
+# Recommended: fully self-contained (whole patched dsh + node_modules, ~57 MB)
+npm i -g https://github.com/Vengisk/deepseek-harness-termux/releases/latest/download/dsh-termux-full.tgz
 dsh web
 ```
 
-Two variants are released (see [`prebuilt/README.md`](prebuilt/README.md)):
-`dsh-termux.tgz` (layered, ~360 KB — postinstall fetches dsh from the npm
-registry) and `dsh-termux-full.tgz` (vendored, ~57 MB — the whole patched
-dsh + node_modules in one self-contained artifact). Maintainers rebuild both
-with [`scripts/build-prebuilt.sh`](scripts/build-prebuilt.sh).
+A lighter variant is also released (see [`prebuilt/README.md`](prebuilt/README.md)):
+`dsh-termux.tgz` (~360 KB) — a postinstall fetches dsh from the npm registry
+(with npmjs→npmmirror fallback), applies the patches, and drops in the
+prebuilt natives. Prefer it only when the ~57 MB download is a concern.
+Maintainers rebuild both with
+[`scripts/build-prebuilt.sh`](scripts/build-prebuilt.sh).
 
 ## Usage
 

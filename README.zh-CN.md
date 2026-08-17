@@ -70,20 +70,20 @@ bash install.sh
 6. **安装移动端 UI 插件** [`dsh-web-mobile`](https://github.com/mexiaosqwq/dsh-web-mobile)(by @mexiaosqwq)——窄屏自动隐藏侧栏、目录变抽屉、会话全宽。
 7. **冒烟测试**:验证 `node-pty` 可以加载、默认 shell 可以解析。
 
-### 方案二 — 预编译原生模块(推荐,安装快)
+### 方案二 — 预编译原生模块(推荐,无需编译)
 
-完全不需要编译:`node-pty` 和 `koffi` 已为 android-arm64 预编译(N-API,跨 Node 版本 ABI 稳定),postinstall 自动打补丁并放置原生模块:
+完全不需要编译:`node-pty` 和 `koffi` 已为 android-arm64 预编译(N-API,跨 Node 版本 ABI 稳定),源码也已打好转,安装就是纯下载 + 解压:
 
 ```bash
-npm i -g https://github.com/Vengisk/deepseek-harness-termux/releases/latest/download/dsh-termux.tgz
+# 推荐:完全自包含(整个打过补丁的 dsh + node_modules,约 57MB)
+npm i -g https://github.com/Vengisk/deepseek-harness-termux/releases/latest/download/dsh-termux-full.tgz
 dsh web
 ```
 
-发布两种变体(详见 [`prebuilt/README.md`](prebuilt/README.md)):
-`dsh-termux.tgz`(精简,约 360KB — postinstall 从 npm registry 拉取 dsh)和
-`dsh-termux-full.tgz`(全量,约 57MB — 整个打过补丁的 dsh + node_modules
-打包为一个自包含产物)。维护者用
-[`scripts/build-prebuilt.sh`](scripts/build-prebuilt.sh) 重建两者。
+另有精简变体(详见 [`prebuilt/README.md`](prebuilt/README.md)):
+`dsh-termux.tgz`(约 360KB)— postinstall 从 npm registry 拉取 dsh(npmjs→npmmirror
+自动回退)、应用补丁并放入预编译原生模块。仅当在意 ~57MB 下载体积时再选它。
+维护者用 [`scripts/build-prebuilt.sh`](scripts/build-prebuilt.sh) 重建两者。
 
 ## 使用方法
 

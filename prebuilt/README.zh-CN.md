@@ -11,17 +11,7 @@
 
 ## 安装 — 两种模式
 
-### 精简模式(小,约 360KB)— 推荐
-
-```bash
-npm i -g https://github.com/Vengisk/deepseek-harness-termux/releases/latest/download/dsh-termux.tgz
-dsh web
-```
-
-postinstall 从 npm registry 拉取 `@deepseek-ai/dsh`(npmjs→npmmirror 自动回退)、
-应用内置补丁、放入预编译原生模块。产物小;安装时需要联网。
-
-### 全量模式(完全自包含,约 57MB)
+### 全量模式(完全自包含,约 57MB)— 推荐
 
 ```bash
 npm i -g https://github.com/Vengisk/deepseek-harness-termux/releases/latest/download/dsh-termux-full.tgz
@@ -29,8 +19,20 @@ dsh web
 ```
 
 把**整个打过补丁的 dsh + node_modules**(含原生模块与 sharp wasm)打包成一个
-产物,无需 postinstall。与参考的 `dsh-termux` 包行为一致:冷 npm 缓存时 npm
-仍可能联网校验依赖;热缓存(或曾装过)时直接从包内安装,很快。
+自包含产物,普通 `npm i -g` 即可,无需 postinstall。与参考的 `dsh-termux` 包
+行为一致:冷 npm 缓存时 npm 仍可能联网校验依赖;热缓存(或曾装过)时直接从包内
+安装,很快。
+
+### 精简模式(小,约 360KB)
+
+```bash
+npm i -g https://github.com/Vengisk/deepseek-harness-termux/releases/latest/download/dsh-termux.tgz
+dsh web
+```
+
+postinstall 从 npm registry 拉取 `@deepseek-ai/dsh`(npmjs→npmmirror 自动回退)、
+应用内置补丁、放入预编译原生模块。产物小;安装时需要联网。仅当在意 ~57MB
+下载体积时选择此模式。
 
 ## postinstall 做的事(精简模式)
 

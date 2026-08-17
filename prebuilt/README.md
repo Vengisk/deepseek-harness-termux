@@ -12,18 +12,7 @@ needed.
 
 ## Install — two variants
 
-### Layered (small, ~360 KB) — recommended
-
-```bash
-npm i -g https://github.com/Vengisk/deepseek-harness-termux/releases/latest/download/dsh-termux.tgz
-dsh web
-```
-
-The postinstall fetches `@deepseek-ai/dsh` from the npm registry (with
-npmjs→npmmirror fallback), applies the bundled patches, and drops in the
-prebuilt natives. Small artifact; needs the registry at install time.
-
-### Vendored (fully self-contained, ~57 MB)
+### Vendored (fully self-contained, ~57 MB) — recommended
 
 ```bash
 npm i -g https://github.com/Vengisk/deepseek-harness-termux/releases/latest/download/dsh-termux-full.tgz
@@ -31,9 +20,22 @@ dsh web
 ```
 
 Bundles the **entire patched dsh + node_modules** (natives and sharp's wasm
-included) — one artifact, no postinstall. Like the reference `dsh-termux`
-package, npm may still consult the registry on a cold npm cache; with a warm
-cache (or after a previous install) it installs from the bundle quickly.
+included) — one self-contained artifact, plain `npm i -g`, no postinstall.
+Like the reference `dsh-termux` package, npm may still consult the registry on
+a cold npm cache; with a warm cache (or after a previous install) it installs
+from the bundle quickly.
+
+### Layered (small, ~360 KB)
+
+```bash
+npm i -g https://github.com/Vengisk/deepseek-harness-termux/releases/latest/download/dsh-termux.tgz
+dsh web
+```
+
+A postinstall fetches `@deepseek-ai/dsh` from the npm registry (with
+npmjs→npmmirror fallback), applies the bundled patches, and drops in the
+prebuilt natives. Small artifact; needs the registry at install time. Choose
+this only when the ~57 MB download matters.
 
 ## What the postinstall does (layered variant)
 

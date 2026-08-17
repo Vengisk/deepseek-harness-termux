@@ -1,6 +1,4 @@
-node_modules/
-.DS_Store
-*.log
-# Prebuilt tarball (built on-device, upload to a GitHub release)
+# Prebuilt tarballs (built on-device, upload to a GitHub release)
 dsh-termux.tgz
+dsh-termux-full.tgz
 prebuilt/prebuilt/android-arm64/*.node
