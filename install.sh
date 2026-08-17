@@ -303,7 +303,27 @@ NPM_MIRRORS=(
 )
 NPM_LOG_FILE="${PREFIX:-/data/data/com.termux/files/usr}/tmp/dsh-npm-install.log"
 
+DSH_DIR="$(npm root -g)/@deepseek-ai/dsh"
+
+# Fast path: if the installed version already matches the latest release, skip
+# the npm install entirely. Re-running `npm install -g` re-extracts all 500+
+# packages (wiping our patches and native builds, which then all get redone),
+# so this check is what makes re-runs of install.sh truly fast and idempotent.
+# The patch/build steps below are themselves skip-aware and cover a partial
+# or broken previous install (missing pty.node/koffi.node get rebuilt).
 DSH_INSTALL_OK=false
+if [ -f "$DSH_DIR/package.json" ]; then
+    _installed_ver="$(node -p "require('$DSH_DIR/package.json').version" 2>/dev/null || true)"
+    _latest_ver="$(npm view @deepseek-ai/dsh version 2>/dev/null || true)"
+    if [ -n "$_installed_ver" ] && [ "$_installed_ver" = "$_latest_ver" ]; then
+        echo "  [SKIP] @deepseek-ai/dsh@$_installed_ver already installed (latest) — skipping npm install"
+        DSH_INSTALL_OK=true
+    else
+        echo "  [INFO] installed=$_installed_ver latest=$_latest_ver — installing @deepseek-ai/dsh@latest"
+    fi
+fi
+
+if ! $DSH_INSTALL_OK; then
 for _registry in "${NPM_MIRRORS[@]}"; do
     echo "" > "$NPM_LOG_FILE"
     {
@@ -345,6 +365,7 @@ for _registry in "${NPM_MIRRORS[@]}"; do
         break
     fi
 done
+fi
 
 if ! $DSH_INSTALL_OK; then
     echo "  [ERROR] All registries failed. Last resort: default npm settings"
@@ -358,21 +379,23 @@ if ! $DSH_INSTALL_OK; then
     exit 1
 fi
 
-DSH_DIR="$(npm root -g)/@deepseek-ai/dsh"
 DSH_PKGS="$DSH_DIR/node_modules/@deepseek-ai"
 echo "  [OK] Package installed at: $DSH_DIR"
 
 # ── Step 4: Apply Android source patches ────────────────────────────────────
 echo "==> [4/9] Applying Android platform patches..."
 
-apply_patch "$REPO_DIR/patches/01-terminal-bash-android-shell.patch"         "$DSH_PKGS/dsh-terminal-bash"
-apply_patch "$REPO_DIR/patches/02-session-persistence-link-rename.patch"      "$DSH_PKGS/dsh-session-persistence-jsonl"
-apply_patch "$REPO_DIR/patches/03-subprocess-local-android.patch"             "$DSH_PKGS/dsh-subprocess-local"
-apply_patch "$REPO_DIR/patches/04-host-apiproxy-termux-open-index.patch"      "$DSH_PKGS/dsh-host-apiproxy"
-apply_patch "$REPO_DIR/patches/04-host-apiproxy-termux-open-opener.patch"     "$DSH_PKGS/dsh-host-apiproxy"
-apply_patch "$REPO_DIR/patches/05-host-directory-picker-native-android.patch" "$DSH_PKGS/dsh-host-directory-picker-native"
-apply_patch "$REPO_DIR/patches/06-workspace-archive-skip-session-known-check.patch" "$DSH_PKGS/dsh-workspace"
-apply_patch "$REPO_DIR/patches/07-sandbox-local-proot-runner.patch"           "$DSH_PKGS/dsh-sandbox-local"
+# Note: apply_patch returns 1 for "already applied / inapplicable" — under
+# `set -e` a top-level non-zero return would abort the script, so the plain
+# patch calls are guarded with `|| true` (their messages still print).
+apply_patch "$REPO_DIR/patches/01-terminal-bash-android-shell.patch"         "$DSH_PKGS/dsh-terminal-bash" || true
+apply_patch "$REPO_DIR/patches/02-session-persistence-link-rename.patch"      "$DSH_PKGS/dsh-session-persistence-jsonl" || true
+apply_patch "$REPO_DIR/patches/03-subprocess-local-android.patch"             "$DSH_PKGS/dsh-subprocess-local" || true
+apply_patch "$REPO_DIR/patches/04-host-apiproxy-termux-open-index.patch"      "$DSH_PKGS/dsh-host-apiproxy" || true
+apply_patch "$REPO_DIR/patches/04-host-apiproxy-termux-open-opener.patch"     "$DSH_PKGS/dsh-host-apiproxy" || true
+apply_patch "$REPO_DIR/patches/05-host-directory-picker-native-android.patch" "$DSH_PKGS/dsh-host-directory-picker-native" || true
+apply_patch "$REPO_DIR/patches/06-workspace-archive-skip-session-known-check.patch" "$DSH_PKGS/dsh-workspace" || true
+apply_patch "$REPO_DIR/patches/07-sandbox-local-proot-runner.patch"           "$DSH_PKGS/dsh-sandbox-local" || true
 
 # ── Step 5: Build native addons (koffi first — its statx() patch must be     ─
 #            baked into the binary) ───────────────────────────────────────────
