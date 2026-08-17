@@ -1,5 +1,10 @@
 # dsh-termux — precompiled Termux deployment (Plan B)
 
+English | [简体中文](README.zh-CN.md)
+
+---
+
+
 Installs the patched [`@deepseek-ai/dsh`](https://github.com/deepseek-ai/deepseek-harness)
 globally on Termux **without compiling anything**: the native modules
 (`node-pty`, `koffi`) ship prebuilt for **android-arm64** (N-API — ABI stable

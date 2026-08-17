@@ -58,6 +58,7 @@ mkdir -p "$STAGE/package/bin" \
 cp "$PKG_DIR/package.json" "$STAGE/package/"
 cp "$PKG_DIR/install.js"    "$STAGE/package/"
 cp "$PKG_DIR/README.md"     "$STAGE/package/"
+cp "$PKG_DIR/README.zh-CN.md" "$STAGE/package/"
 cp "$PKG_DIR/bin/dsh"       "$STAGE/package/bin/dsh"
 chmod +x "$STAGE/package/bin/dsh"
 cp "$REPO_DIR"/patches/*.patch "$STAGE/package/patches/"

@@ -15,7 +15,8 @@
     "install.js",
     "patches",
     "prebuilt",
-    "README.md"
+    "README.md",
+    "README.zh-CN.md"
   ],
   "engines": {
     "node": ">=22.19.0"

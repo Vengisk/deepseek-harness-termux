@@ -23,10 +23,6 @@ const path = require("node:path");
 const DSH_VERSION = process.env.DSH_VERSION || "0.1.0-rc.6";
 const PKG_DIR = __dirname;
 
-function run(cmd, opts) {
-  execSync(cmd, { stdio: "inherit", ...opts });
-}
-
 function sh(cmd, opts) {
   try {
     return execSync(cmd, { stdio: "pipe", ...opts }).toString().trim();
@@ -48,8 +44,32 @@ const dshDir = path.join(globalRoot, "@deepseek-ai", "dsh");
 const dshPkgs = path.join(dshDir, "node_modules", "@deepseek-ai");
 
 // ── Step 1: install dsh (download only, nothing compiles) ──────────────────
-console.log(`==> [1/3] Installing @deepseek-ai/dsh@${DSH_VERSION} (no scripts — nothing compiles)`);
-run(`npm install -g --ignore-scripts @deepseek-ai/dsh@${DSH_VERSION}`);
+// Try the user's configured registry first (respects .npmrc / mirrors the
+// user already set up), then fall back to the official registry and finally
+// npmmirror (China) — same multi-source strategy as install.sh.
+console.log(`==> [1/5] Installing @deepseek-ai/dsh@${DSH_VERSION} (no scripts — nothing compiles)`);
+function installDsh(registry) {
+  const flag = registry ? ` --registry="${registry}"` : "";
+  execSync(`npm install -g --ignore-scripts @deepseek-ai/dsh@${DSH_VERSION}${flag}`, {
+    stdio: "inherit",
+    timeout: 600000,
+  });
+}
+const REGISTRY_FALLBACKS = [null, "https://registry.npmjs.org", "https://registry.npmmirror.com"];
+let dshInstalled = false;
+for (const registry of REGISTRY_FALLBACKS) {
+  try {
+    installDsh(registry);
+    dshInstalled = true;
+    break;
+  } catch {
+    console.log(`  [WARN] registry ${registry ?? "(user default)"} failed — trying next`);
+  }
+}
+if (!dshInstalled) {
+  console.error("  [ERROR] could not install @deepseek-ai/dsh from any registry");
+  process.exit(1);
+}
 
 // ── Step 2: apply the Android source patches ───────────────────────────────
 console.log("==> [2/3] Applying Android platform patches");
@@ -106,10 +126,20 @@ for (const [file, dest] of TARGETS) {
 // sharp's native (libvips) binary is not available for android-arm64; dsh's
 // attachment plugin fails to boot without it. The portable wasm build fixes it.
 console.log("==> [4/5] Installing sharp WebAssembly fallback...");
-try {
-  execSync("npm install @img/sharp-wasm32", { cwd: dshDir, stdio: "pipe" });
+let sharpOk = false;
+for (const registry of REGISTRY_FALLBACKS) {
+  try {
+    const flag = registry ? ` --registry="${registry}"` : "";
+    execSync(`npm install @img/sharp-wasm32${flag}`, { cwd: dshDir, stdio: "pipe", timeout: 300000 });
+    sharpOk = true;
+    break;
+  } catch {
+    // try next registry
+  }
+}
+if (sharpOk) {
   console.log("  [OK] @img/sharp-wasm32 installed");
-} catch {
+} else {
   console.log("  [WARN] could not install @img/sharp-wasm32 (sharp may fail to load)");
 }
 
