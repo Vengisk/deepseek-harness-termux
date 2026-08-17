@@ -76,6 +76,38 @@ The installer automatically installs the [`dsh-web-mobile`](https://github.com/m
 - Status bar adapted (no content obstruction)
 - Settings panel becomes a near-full-width sheet
 
+### Web Search
+
+Two ways to enable web search in the web UI:
+
+1. **Recommended — `dsh-web-search-pro`** (multi-engine: Exa / DuckDuckGo /
+   Bing / Jina / platform searches with cache). Installed into the web profile:
+
+   ```bash
+   dsh plugin --profile web add dsh-web-search-pro
+   # its patch references @anweat/dsh-browser — install it as a plain
+   # dependency so the inserted `browser` row resolves at boot:
+   cd ~/.dsh/profiles/web && pnpm add @anweat/dsh-browser
+   ```
+
+   Then configure your Exa key in `~/.dsh/settings.yaml` (hot-reloaded):
+
+   ```yaml
+   web-search-pro:
+     exaApiKey: 'exa-...'        # or EXA_API_KEY in ~/.dsh/.credentials.yaml
+     engines: [exa, ddg, bing]   # optional; defaults to [ddg,bing,exa,seam,jina]
+   ```
+
+   Restart `dsh web` once after installing the plugin.
+
+2. **Built-in `web-search-deepseek`** — speaks DeepSeek's *Anthropic-compatible*
+   Messages API (`baseURL` + `/messages`) with the native `web_search_20250305`
+   tool. ⚠️ It is **not** an Exa client: pointing its `baseURL` at
+   `https://api.exa.ai/search` makes it request `.../search/messages`, which
+   returns **404**. Leave its `baseURL` at the default
+   `https://api.deepseek.com/anthropic/v1` and use a key valid for the
+   endpoint you point it at.
+
 ## Preview
 
 | Session Home (Full Width) | Directory Drawer | Settings Interface |

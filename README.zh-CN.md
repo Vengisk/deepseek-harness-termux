@@ -75,6 +75,31 @@ bash install.sh
 - 状态栏适配(不遮挡内容)
 - 设置界面改为近全宽 sheet
 
+### 网页搜索
+
+Web UI 里有两种开启网页搜索的方式:
+
+1. **推荐 — `dsh-web-search-pro`**(多引擎:Exa / DuckDuckGo / Bing / Jina / 平台搜索,带缓存)。装进 web profile:
+
+   ```bash
+   dsh plugin --profile web add dsh-web-search-pro
+   # 它的 patch 引用了 @anweat/dsh-browser —— 需作为普通依赖装一下,
+   # 否则启动时 `browser` 行无法解析:
+   cd ~/.dsh/profiles/web && pnpm add @anweat/dsh-browser
+   ```
+
+   然后在 `~/.dsh/settings.yaml` 里配置 Exa key(热重载,改完即生效):
+
+   ```yaml
+   web-search-pro:
+     exaApiKey: 'exa-...'        # 或把 EXA_API_KEY 写进 ~/.dsh/.credentials.yaml
+     engines: [exa, ddg, bing]   # 可选;默认 [ddg,bing,exa,seam,jina]
+   ```
+
+   装完插件后重启一次 `dsh web`。
+
+2. **内置 `web-search-deepseek`** — 只讲 DeepSeek 的 *Anthropic 兼容* Messages API(`baseURL` + `/messages`,原生 `web_search_20250305` 工具)。⚠️ 它**不是** Exa 客户端:把 `baseURL` 指向 `https://api.exa.ai/search` 会去请求 `.../search/messages`,必然 **404**。保持默认 `https://api.deepseek.com/anthropic/v1`,并使用在该端点有效的 key。
+
 ## 效果
 
 | 会话主页(全宽) | 目录抽屉 | 设置界面 |
