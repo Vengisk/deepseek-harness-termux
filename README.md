@@ -49,7 +49,7 @@ Two deployment options:
 ### Plan A — compile on device (install.sh)
 
 Full control, works on any arm64 Termux; compiles `node-pty`/`koffi` once
-(clang + cmake + NDK sysroot needed, ~10–20 min):
+(clang + cmake + NDK sysroot needed, ~5–10 min):
 
 ```bash
 # Clone this repository
