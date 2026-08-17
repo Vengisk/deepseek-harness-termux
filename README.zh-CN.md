@@ -43,6 +43,31 @@ Termux 构建中所有插件均启用并可用:
 
 ## 安装
 
+两种部署方式:
+
+### 方案一 — 本机编译(install.sh)
+
+完全可控,适用于任意 arm64 Termux;需一次性编译 `node-pty`/`koffi`(需要 clang + cmake + NDK sysroot,约 10–20 分钟):
+
+```bash
+git clone https://github.com/Vengisk/deepseek-harness-termux.git
+cd deepseek-harness-termux
+bash install.sh
+```
+
+### 方案二 — 预编译原生模块(推荐,安装快)
+
+完全不需要编译:`node-pty` 和 `koffi` 已为 android-arm64 预编译(N-API,跨 Node 版本 ABI 稳定),postinstall 自动打补丁并放置原生模块:
+
+```bash
+npm i -g https://github.com/Vengisk/deepseek-harness-termux/releases/latest/download/dsh-termux.tgz
+dsh web
+```
+
+详见 [`prebuilt/README.md`](prebuilt/README.md)。维护者用
+[`scripts/build-prebuilt.sh`](scripts/build-prebuilt.sh) 重建 tarball。
+## 安装
+
 ```bash
 # 克隆本仓库
 git clone https://github.com/Vengisk/deepseek-harness-termux.git

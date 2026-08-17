@@ -1,0 +1,5 @@
+# Prebuilt native modules are assembled by scripts/build-prebuilt.sh
+# (they are binary artifacts and must NOT be committed).
+prebuilt/android-arm64/*.node
+prebuilt/android-arm64/spawn-helper
+*.tgz

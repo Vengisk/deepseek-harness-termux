@@ -44,6 +44,34 @@ Every plugin is enabled and working in the Termux build:
 
 ## Installation
 
+Two deployment options:
+
+### Plan A — compile on device (install.sh)
+
+Full control, works on any arm64 Termux; compiles `node-pty`/`koffi` once
+(clang + cmake + NDK sysroot needed, ~10–20 min):
+
+```bash
+git clone https://github.com/Vengisk/deepseek-harness-termux.git
+cd deepseek-harness-termux
+bash install.sh
+```
+
+### Plan B — precompiled native modules (recommended for speed)
+
+No compilation at all: `node-pty` and `koffi` ship prebuilt for android-arm64
+(N-API, ABI-stable), and the postinstall patches the sources and wires the
+natives automatically:
+
+```bash
+npm i -g https://github.com/Vengisk/deepseek-harness-termux/releases/latest/download/dsh-termux.tgz
+dsh web
+```
+
+See [`prebuilt/README.md`](prebuilt/README.md) for details. Maintainers rebuild
+the tarball with [`scripts/build-prebuilt.sh`](scripts/build-prebuilt.sh).
+## Installation
+
 ```bash
 # Clone this repository
 git clone https://github.com/Vengisk/deepseek-harness-termux.git
