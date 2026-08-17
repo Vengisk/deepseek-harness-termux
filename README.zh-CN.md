@@ -75,6 +75,30 @@ bash install.sh
 - 状态栏适配(不遮挡内容)
 - 设置界面改为近全宽 sheet
 
+
+## 效果
+
+| 会话主页(全宽) | 目录抽屉 | 设置界面 |
+| --- | --- | --- |
+| ![移动端会话主页](https://raw.githubusercontent.com/mexiaosqwq/dsh-web-mobile/main/assets/hero.png) | ![目录抽屉](https://raw.githubusercontent.com/mexiaosqwq/dsh-web-mobile/main/assets/drawer.png) | ![移动端设置界面](https://raw.githubusercontent.com/mexiaosqwq/dsh-web-mobile/main/assets/settings.png) |
+
+
+### 启动
+
+以全插件模式启动 Web 界面:
+
+```bash
+node --expose-internals $(npm root -g)/@deepseek-ai/dsh/lib/bin.js web
+```
+
+或在 `~/.bashrc` 中添加别名:
+
+```bash
+alias dsh='node --expose-internals $(npm root -g)/@deepseek-ai/dsh/lib/bin.js'
+```
+
+`--expose-internals` 标志是必需的,因为 `cordis-plugin-hmr` 会访问 Node.js 内部模块(如 `node:internal/modules`),自 Node.js 22 起默认禁止访问。
+
 ### 网页搜索
 
 Web UI 里有两种开启网页搜索的方式:
@@ -99,29 +123,6 @@ Web UI 里有两种开启网页搜索的方式:
    装完插件后重启一次 `dsh web`。
 
 2. **内置 `web-search-deepseek`** — 只讲 DeepSeek 的 *Anthropic 兼容* Messages API(`baseURL` + `/messages`,原生 `web_search_20250305` 工具)。⚠️ 它**不是** Exa 客户端:把 `baseURL` 指向 `https://api.exa.ai/search` 会去请求 `.../search/messages`,必然 **404**。保持默认 `https://api.deepseek.com/anthropic/v1`,并使用在该端点有效的 key。
-
-## 效果
-
-| 会话主页(全宽) | 目录抽屉 | 设置界面 |
-| --- | --- | --- |
-| ![移动端会话主页](https://raw.githubusercontent.com/mexiaosqwq/dsh-web-mobile/main/assets/hero.png) | ![目录抽屉](https://raw.githubusercontent.com/mexiaosqwq/dsh-web-mobile/main/assets/drawer.png) | ![移动端设置界面](https://raw.githubusercontent.com/mexiaosqwq/dsh-web-mobile/main/assets/settings.png) |
-
-
-### 启动
-
-以全插件模式启动 Web 界面:
-
-```bash
-node --expose-internals $(npm root -g)/@deepseek-ai/dsh/lib/bin.js web
-```
-
-或在 `~/.bashrc` 中添加别名:
-
-```bash
-alias dsh='node --expose-internals $(npm root -g)/@deepseek-ai/dsh/lib/bin.js'
-```
-
-`--expose-internals` 标志是必需的,因为 `cordis-plugin-hmr` 会访问 Node.js 内部模块(如 `node:internal/modules`),自 Node.js 22 起默认禁止访问。
 
 ## 源码补丁
 
