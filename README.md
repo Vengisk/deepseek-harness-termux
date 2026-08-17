@@ -52,27 +52,6 @@ Full control, works on any arm64 Termux; compiles `node-pty`/`koffi` once
 (clang + cmake + NDK sysroot needed, ~10–20 min):
 
 ```bash
-git clone https://github.com/Vengisk/deepseek-harness-termux.git
-cd deepseek-harness-termux
-bash install.sh
-```
-
-### Plan B — precompiled native modules (recommended for speed)
-
-No compilation at all: `node-pty` and `koffi` ship prebuilt for android-arm64
-(N-API, ABI-stable), and the postinstall patches the sources and wires the
-natives automatically:
-
-```bash
-npm i -g https://github.com/Vengisk/deepseek-harness-termux/releases/latest/download/dsh-termux.tgz
-dsh web
-```
-
-See [`prebuilt/README.md`](prebuilt/README.md) for details. Maintainers rebuild
-the tarball with [`scripts/build-prebuilt.sh`](scripts/build-prebuilt.sh).
-## Installation
-
-```bash
 # Clone this repository
 git clone https://github.com/Vengisk/deepseek-harness-termux.git
 cd deepseek-harness-termux
@@ -92,6 +71,20 @@ The installer is idempotent — re-running it skips already-applied patches and 
 5. **Installs `@img/sharp-wasm32`** as a portable WebAssembly fallback for image processing (no native build needed).
 6. **Installs the mobile UI plugin** [`dsh-web-mobile`](https://github.com/mexiaosqwq/dsh-web-mobile) (by @mexiaosqwq) — hides sidebar on narrow screens, directory becomes overlay drawer, conversation gets full width.
 7. **Runs a smoke test** to verify `node-pty` loads and the default shell resolves.
+
+### Plan B — precompiled native modules (recommended for speed)
+
+No compilation at all: `node-pty` and `koffi` ship prebuilt for android-arm64
+(N-API, ABI-stable), and the postinstall patches the sources and wires the
+natives automatically:
+
+```bash
+npm i -g https://github.com/Vengisk/deepseek-harness-termux/releases/latest/download/dsh-termux.tgz
+dsh web
+```
+
+See [`prebuilt/README.md`](prebuilt/README.md) for details. Maintainers rebuild
+the tarball with [`scripts/build-prebuilt.sh`](scripts/build-prebuilt.sh).
 
 ## Usage
 
