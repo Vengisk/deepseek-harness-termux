@@ -83,8 +83,11 @@ npm i -g https://github.com/Vengisk/deepseek-harness-termux/releases/latest/down
 dsh web
 ```
 
-See [`prebuilt/README.md`](prebuilt/README.md) for details. Maintainers rebuild
-the tarball with [`scripts/build-prebuilt.sh`](scripts/build-prebuilt.sh).
+Two variants are released (see [`prebuilt/README.md`](prebuilt/README.md)):
+`dsh-termux.tgz` (layered, ~360 KB — postinstall fetches dsh from the npm
+registry) and `dsh-termux-full.tgz` (vendored, ~57 MB — the whole patched
+dsh + node_modules in one self-contained artifact). Maintainers rebuild both
+with [`scripts/build-prebuilt.sh`](scripts/build-prebuilt.sh).
 
 ## Usage
 

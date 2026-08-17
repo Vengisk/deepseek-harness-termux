@@ -79,8 +79,11 @@ npm i -g https://github.com/Vengisk/deepseek-harness-termux/releases/latest/down
 dsh web
 ```
 
-详见 [`prebuilt/README.md`](prebuilt/README.md)。维护者用
-[`scripts/build-prebuilt.sh`](scripts/build-prebuilt.sh) 重建 tarball。
+发布两种变体(详见 [`prebuilt/README.md`](prebuilt/README.md)):
+`dsh-termux.tgz`(精简,约 360KB — postinstall 从 npm registry 拉取 dsh)和
+`dsh-termux-full.tgz`(全量,约 57MB — 整个打过补丁的 dsh + node_modules
+打包为一个自包含产物)。维护者用
+[`scripts/build-prebuilt.sh`](scripts/build-prebuilt.sh) 重建两者。
 
 ## 使用方法
 
