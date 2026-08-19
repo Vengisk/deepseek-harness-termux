@@ -62,6 +62,11 @@ bash install.sh
 
 The installer is idempotent — re-running it skips already-applied patches and already-built artifacts.
 
+After install, `dsh` is usable directly: the installed `bin.js` shebang is
+patched with `--expose-internals` (so npm's `dsh` bin works in any shell),
+and a `dsh` alias is auto-appended to `~/.bashrc` (created if missing, or
+`~/.zshrc` for zsh) — your existing shell config is never overwritten.
+
 ### How installation script work
 
 1. **Installs** `@deepseek-ai/dsh` globally.

@@ -607,25 +607,45 @@ fi
 echo ""
 echo "==> Installation complete!"
 echo ""
-echo "To start dsh web (all plugins enabled), run:"
-echo ""
-echo "  node --expose-internals $(npm root -g)/@deepseek-ai/dsh/lib/bin.js web"
-echo ""
 
-# Add a convenient dsh alias WITHOUT overwriting the user's own ~/.bashrc:
-# append only if it is not already present.
-_DSH_ALIAS="alias dsh='node --expose-internals \$(npm root -g)/@deepseek-ai/dsh/lib/bin.js'"
-if [ -f "$HOME/.bashrc" ] && ! grep -q "alias dsh=" "$HOME/.bashrc" 2>/dev/null; then
-    echo "$_DSH_ALIAS" >> "$HOME/.bashrc"
-    echo "  [OK] Appended to $HOME/.bashrc:"
-    echo "    $_DSH_ALIAS"
-    echo "  [INFO] Run 'source ~/.bashrc' once (or open a new session) to activate,"
-    echo "  [INFO] then you can just type: dsh web"
-elif [ -f "$HOME/.bashrc" ]; then
-    echo "  [SKIP] dsh alias already present in $HOME/.bashrc"
+# ── Make `dsh` usable directly (no manual alias needed) ─────────────────────
+# 1) Patch the installed bin.js shebang so npm's own `dsh` bin always runs
+#    with --expose-internals (required by HMR) — works in ANY shell, even
+#    inside scripts. Same trick the prebuilt (Plan B) packages use.
+DSH_BIN_JS="$DSH_DIR/lib/bin.js"
+if [ -f "$DSH_BIN_JS" ] && ! head -1 "$DSH_BIN_JS" | grep -q -- "--expose-internals"; then
+    NODE_BIN="$(command -v node)"
+    { printf '#!%s --expose-internals\n' "$NODE_BIN"; tail -n +2 "$DSH_BIN_JS"; } > "$DSH_BIN_JS.new"
+    mv "$DSH_BIN_JS.new" "$DSH_BIN_JS"
+    echo "  [OK] patched $DSH_BIN_JS shebang (--expose-internals)"
 else
-    echo "  [INFO] No ~/.bashrc found — add this alias yourself to use 'dsh':"
+    echo "  [OK] dsh bin.js shebang already has --expose-internals"
+fi
+
+# 2) Belt-and-suspenders: append a `dsh` alias to the user's shell rc
+#    WITHOUT overwriting it (the shebang patch covers re-extracted bin.js
+#    cases; the alias covers every interactive shell). Creates the rc file
+#    if it does not exist yet, so the alias is always persisted.
+_DSH_ALIAS="alias dsh='node --expose-internals \$(npm root -g)/@deepseek-ai/dsh/lib/bin.js'"
+_RC_FILE=""
+if [ -f "$HOME/.bashrc" ]; then
+    _RC_FILE="$HOME/.bashrc"
+elif [ -n "${SHELL:-}" ] && [ "${SHELL##*/}" = "zsh" ] && [ -f "$HOME/.zshrc" ]; then
+    _RC_FILE="$HOME/.zshrc"
+else
+    _RC_FILE="$HOME/.bashrc"
+    touch "$_RC_FILE"   # ensure the alias is actually persisted
+fi
+if grep -q "alias dsh=" "$_RC_FILE" 2>/dev/null; then
+    echo "  [SKIP] dsh alias already present in $_RC_FILE"
+else
+    echo "$_DSH_ALIAS" >> "$_RC_FILE"
+    echo "  [OK] Appended to $_RC_FILE:"
     echo "    $_DSH_ALIAS"
+    echo "  [INFO] Run 'source $_RC_FILE' once (or open a new session) to activate,"
+    echo "  [INFO] then you can just type: dsh web"
 fi
 echo ""
-echo "  (Your existing ~/.bashrc was never overwritten.)"
+echo "  (Your existing shell config was never overwritten.)"
+echo ""
+echo "Now run:  dsh web"

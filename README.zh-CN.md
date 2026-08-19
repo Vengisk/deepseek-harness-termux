@@ -60,6 +60,11 @@ bash install.sh
 
 安装脚本是幂等的 —— 重复执行时会跳过已应用的补丁和已构建的产物。
 
+安装完成后 `dsh` 直接可用:已安装的 `bin.js` shebang 会被补上
+`--expose-internals`(任何 shell 里 npm 的 `dsh` 命令都能直接用),同时自动
+向 `~/.bashrc` 追加 `dsh` 别名(不存在则创建;zsh 用户用 `~/.zshrc`)——
+不会覆盖你已有的 shell 配置。
+
 ### 安装脚本原理
 
 1. **全局安装** `@deepseek-ai/dsh`。
