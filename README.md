@@ -29,7 +29,7 @@ Every plugin is enabled and working in the Termux build:
 
 ## Prerequisites
 
-- **Android 12+** recommended (older versions may work but are untested)
+- **Android 8+** recommended (older versions may work but are untested)
 - **Termux** from [F-Droid](https://f-droid.org/en/packages/com.termux/) (the Play Store version is unsupported and outdated)
 - **Node.js >= 24**, **npm**, and the build toolchain for native modules:
   ```bash
