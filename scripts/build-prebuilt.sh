@@ -148,6 +148,7 @@ build_full() {
         NODE_BIN="$(command -v node)"
         { printf '#!%s --expose-internals\n' "$NODE_BIN"; tail -n +2 "$BIN_JS"; } > "$BIN_JS.new"
         mv "$BIN_JS.new" "$BIN_JS"
+        chmod +x "$BIN_JS"   # the .new rewrite drops +x under umask — restore it
         echo "    -> bin.js shebang patched (--expose-internals)"
     fi
 

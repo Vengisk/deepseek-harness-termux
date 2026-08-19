@@ -617,6 +617,7 @@ if [ -f "$DSH_BIN_JS" ] && ! head -1 "$DSH_BIN_JS" | grep -q -- "--expose-intern
     NODE_BIN="$(command -v node)"
     { printf '#!%s --expose-internals\n' "$NODE_BIN"; tail -n +2 "$DSH_BIN_JS"; } > "$DSH_BIN_JS.new"
     mv "$DSH_BIN_JS.new" "$DSH_BIN_JS"
+    chmod +x "$DSH_BIN_JS"   # the .new rewrite drops +x under umask — restore it
     echo "  [OK] patched $DSH_BIN_JS shebang (--expose-internals)"
 else
     echo "  [OK] dsh bin.js shebang already has --expose-internals"

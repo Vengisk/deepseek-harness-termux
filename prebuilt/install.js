@@ -31,6 +31,24 @@ function sh(cmd, opts) {
   }
 }
 
+// ── Pre-flight checks ───────────────────────────────────────────────────────
+// Fail fast with a clear message instead of a confusing mid-install error.
+const [nodeMajor] = process.versions.node.split(".").map(Number);
+if (Number(nodeMajor) < 22) {
+  console.error(`[ERROR] dsh needs Node.js >= 22.19 (found ${process.version}).`);
+  console.error("        On Termux:  pkg install nodejs-lts   (then reopen the shell)");
+  process.exit(1);
+}
+if (process.arch !== "arm64") {
+  console.error(`[ERROR] this package ships android-arm64 binaries only (found ${process.arch}).`);
+  console.error("        On an arm64 Termux device use the full install:  bash install.sh");
+  process.exit(1);
+}
+if (process.platform !== "android") {
+  console.warn("  [WARN] this package targets Termux/Android; continuing anyway");
+}
+console.log(`  [OK] ${process.platform}-${process.arch}, node ${process.version}`);
+
 // ── Locate the npm global root ──────────────────────────────────────────────
 let globalRoot = sh("npm root -g");
 if (!globalRoot) {
@@ -122,6 +140,20 @@ for (const [file, dest] of TARGETS) {
   console.log("  [OK]", file, "->", path.relative(globalRoot, dest));
 }
 
+// ── Step 3b: verify the natives actually load ───────────────────────────────
+// Catches an ABI/Node-version mismatch at install time with a clear message
+// instead of a confusing crash at first `dsh web`.
+console.log("==> [3b/5] Verifying native modules load...");
+const verify = sh(`node -e "require('${dshDir}/node_modules/node-pty'); require('${dshDir}/node_modules/koffi'); console.log('ok')"`);
+if (verify.includes("ok")) {
+  console.log("  [OK] node-pty + koffi load");
+} else {
+  console.error("  [ERROR] the prebuilt native modules failed to load on this Node.");
+  console.error("          Node version:", process.version, "| platform:", process.platform, process.arch);
+  console.error("          This package ships android-arm64 N-API binaries (Node >= 22.19).");
+  process.exit(1);
+}
+
 // ── Step 4: sharp WebAssembly fallback ──────────────────────────────────────
 // sharp's native (libvips) binary is not available for android-arm64; dsh's
 // attachment plugin fails to boot without it. The portable wasm build fixes it.
@@ -161,6 +193,7 @@ if (!content.startsWith("#!")) {
   console.log("  [OK] bin.js shebang already has --expose-internals");
 } else {
   fs.writeFileSync(binJs, shebang + "\n" + content.slice(content.indexOf("\n") + 1));
+  fs.chmodSync(binJs, 0o755); // writeFileSync preserves mode; be explicit anyway
   console.log("  [OK] bin.js shebang ->", shebang);
 }
 
