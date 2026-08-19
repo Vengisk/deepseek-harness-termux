@@ -29,7 +29,7 @@ Termux 构建中所有插件均启用并可用:
 
 ## 系统要求
 
-- **Android 12+** 推荐(更早版本可能可运行,但未经测试)
+- **Android 8+** 推荐(更早版本可能可运行,但未经测试)
 - **Termux** — 请从 [F-Droid](https://f-droid.org/en/packages/com.termux/) 安装(Play Store 版本不受支持且已过时)
 - **Node.js >= 24**、**npm**、以及原生模块构建工具链:
   ```bash
